@@ -1,13 +1,9 @@
-# backend-template
-
-## Init Template
-
-This repository is a template. The script [init_template.sh](./scripts/init_template.sh) is meant to be run after creating a repository using this template. This script "self destructs", meaning once it has run, it removes itself and its references in the makefile and this README. The function of this script is to replace the name **backend-template** with the project's real name. It is run with `make init`.
+# iati-cloud.dcma
 
 ## Features
 
 - **Flask REST API** with CORS, Swagger UI, and API key authentication
-- **Flasgger** provides a Swagger UI at `/backend-template/docs/`, spec at `/backend-template/apispec.json`
+- **Flasgger** provides a Swagger UI at `/iati-cloud.dcma/docs/`, spec at `/iati-cloud.dcma/apispec.json`
 - **Pydantic settings** loaded from `.env` for typed configuration
 - **Pre-commit hooks** enforcing formatting, linting, type checks, security scanning, and conventional commits
 - **100% test coverage** enforced via pytest-cov
@@ -34,8 +30,8 @@ See [DIAGRAMS.md](./docs/DIAGRAMS.md) for system architecture.
 ### 1. Clone and Setup
 
 ```bash
-git clone <repository-url>
-cd <backend-template>
+git clone git@github.com:zimmerman-team/iati-cloud.dcma.git
+cd iati-cloud.dcma
 ```
 
 The repo includes a committed `uv.lock` - all dependency versions are pinned for reproducible installs.
@@ -123,4 +119,4 @@ When contributing, make sure to follow the [Code of Conduct](./docs/CODE_OF_COND
 ## Support
 
 For issues and questions:
-- [GitHub Issues](https://github.com/zimmerman-team/backend-template/issues)
+- [GitHub Issues](https://github.com/zimmerman-team/iati-cloud.dcma/issues)

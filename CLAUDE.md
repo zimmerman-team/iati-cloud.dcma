@@ -39,21 +39,21 @@ make docker-down       # Stop services
 
 ## Architecture
 
-Flask REST API template using:
+Flask REST API using:
 - **Flask 3.1** + **flask-cors** — web framework
 - **Pydantic v2** + **pydantic-settings** — data models and config from `.env`
-- **Flasgger** — Swagger UI at `/backend-template/docs/`, spec at `/backend-template/apispec.json`
+- **Flasgger** — Swagger UI at `/iati-cloud.dcma/docs/`, spec at `/iati-cloud.dcma/apispec.json`
 - **Gunicorn** — production WSGI server (4 workers, configured in Dockerfile)
 
 ### Request lifecycle
 
-`app/main.py` wires the app together: registers `app/blueprint.py` at `/backend-template`, calls `init_swagger` from `app/docs.py`, and installs a `before_request` hook that enforces API key auth.
+`app/main.py` wires the app together: registers `app/blueprint.py` at `/iati-cloud.dcma`, calls `init_swagger` from `app/docs.py`, and installs a `before_request` hook that enforces API key auth.
 
 ### Authentication
 
 Every request goes through a `before_request` hook in `app/main.py` that checks the `Authorization` header against `settings.secret_key`. Exempt paths bypass this check. Default key is ''; override via `.env`.
 
-Auth-exempt paths are declared in `app/blueprint.py` as `AUTH_EXEMPT_PATHS` (relative to the blueprint, e.g. `"/health-check"`). `app/config.py` imports that set and prefixes each entry with `_URL_PREFIX` (`/backend-template`) to build `settings.auth_exempt_paths`. To exempt a new route, add it to `AUTH_EXEMPT_PATHS` in `app/blueprint.py`.
+Auth-exempt paths are declared in `app/blueprint.py` as `AUTH_EXEMPT_PATHS` (relative to the blueprint, e.g. `"/health-check"`). `app/config.py` imports that set and prefixes each entry with `_URL_PREFIX` (`/iati-cloud.dcma`) to build `settings.auth_exempt_paths`. To exempt a new route, add it to `AUTH_EXEMPT_PATHS` in `app/blueprint.py`.
 
 ### Adding routes
 
@@ -79,7 +79,7 @@ Shared response schemas go in `app/docs.py` under `_SWAGGER_TEMPLATE["definition
 
 `app/config.py` defines a `Settings` class (pydantic-settings `BaseSettings`) that reads from `.env`. Copy `.env.example` to `.env` and set `SECRET_KEY`.
 
-Logging writes to `logs/backend-template.log` (rotating, 10MB, 5 backups) and stdout. Root logger is at WARNING; `app.*` loggers are at INFO.
+Logging writes to `logs/iati-cloud.dcma.log` (rotating, 10MB, 5 backups) and stdout. Root logger is at WARNING; `app.*` loggers are at INFO.
 
 ### Testing
 

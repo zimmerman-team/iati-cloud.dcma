@@ -1,9 +1,8 @@
-.PHONY: help init install dev-install test test-quiet test-verbose lint format format-check typecheck security check-all docker-up docker-down docker-logs docker-rebuild run clean
+.PHONY: help install dev-install test test-quiet test-verbose lint format format-check typecheck security check-all docker-up docker-down docker-logs docker-rebuild run clean
 
 help:
-	@echo "backend-template - Make Commands"
+	@echo "iati-cloud.dcma - Make Commands"
 	@echo ""
-	@echo "  make init           - init project from template"
 	@echo "  make install        - Install production dependencies"
 	@echo "  make dev-install    - Install development dependencies"
 	@echo "  make test           - Run tests with coverage"
@@ -21,9 +20,6 @@ help:
 	@echo "  make run            - Run Flask development server"
 	@echo "  make clean          - Remove build artifacts"
 	@echo ""
-
-init:
-	bash scripts/init_template.sh
 
 install:
 	uv sync

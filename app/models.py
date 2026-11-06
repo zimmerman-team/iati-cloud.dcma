@@ -1,1 +1,1 @@
-"""Models for the backend-template application."""
+"""Models for the iati-cloud.dcma application."""

@@ -3,9 +3,9 @@
 ## Project Structure
 
 ```
-backend-template/
+iati-cloud.dcma/
 ├── app/
-│   ├── backend-template/
+│   ├── iati-cloud.dcma/
 │   |   └── __init__.py  # Content of the actual feature goes in this directory
 │   ├── blueprint.py     # Flask routes
 │   ├── main.py          # Flask app, routes, auth middleware
@@ -18,7 +18,6 @@ backend-template/
 ├── data/                # Static data files
 ├── logs/                # Rotating log output (runtime)
 ├── scripts/
-│   └── init_template.sh # Rename template to your project
 ├── docker-compose.yaml
 ├── Dockerfile
 ├── Makefile
@@ -38,7 +37,7 @@ Basic directory rules:
 **Step 1**: Add the route to `app/main.py`
 
 ```python
-@app.route("/backend-template/my-endpoint", methods=["GET"])
+@app.route("/iati-cloud.dcma/my-endpoint", methods=["GET"])
 def my_endpoint():
     """
     Endpoint description.
@@ -56,7 +55,7 @@ def my_endpoint():
 
 ```python
 def test_my_endpoint(client, auth_headers):
-    response = client.get("/backend-template/my-endpoint", headers=auth_headers)
+    response = client.get("/iati-cloud.dcma/my-endpoint", headers=auth_headers)
     assert response.status_code == 200
 ```
 
