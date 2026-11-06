@@ -1,0 +1,87 @@
+.PHONY: help init install dev-install test test-quiet test-verbose lint format format-check typecheck security check-all docker-up docker-down docker-logs docker-rebuild run clean
+
+help:
+	@echo "backend-template - Make Commands"
+	@echo ""
+	@echo "  make init           - init project from template"
+	@echo "  make install        - Install production dependencies"
+	@echo "  make dev-install    - Install development dependencies"
+	@echo "  make test           - Run tests with coverage"
+	@echo "  make test-verbose   - Run tests with extra verbosity"
+	@echo "  make lint           - Run linters (flake8)"
+	@echo "  make format         - Format code (ruff check --fix + ruff format)"
+	@echo "  make format-check   - Check formatting without modifying files"
+	@echo "  make typecheck      - Run type checks (ty)"
+	@echo "  make security       - Run security checks (bandit)"
+	@echo "  make check-all      - Run format-check, lint, security, and tests"
+	@echo "  make docker-up      - Start Docker services"
+	@echo "  make docker-down    - Stop Docker services"
+	@echo "  make docker-logs    - Follow Docker service logs"
+	@echo "  make docker-rebuild - Rebuild and start Docker services"
+	@echo "  make run            - Run Flask development server"
+	@echo "  make clean          - Remove build artifacts"
+	@echo ""
+
+init:
+	bash scripts/init_template.sh
+
+install:
+	uv sync
+
+dev-install:
+	uv sync --extra dev
+	uv run pre-commit install
+
+test:
+	uv run pytest
+
+test-quiet:
+	uv run pytest -q --no-header
+
+test-verbose:
+	uv run pytest -vv --cov=app --cov-report=term-missing
+
+lint:
+	uv run flake8 app tests
+
+format:
+	uv run ruff check --fix app tests
+	uv run ruff format app tests
+
+format-check:
+	uv run ruff check app tests
+	uv run ruff format --check app tests
+
+typecheck:
+	uv run ty check app
+
+security:
+	uv run bandit -c pyproject.toml -r app
+
+check-all: format-check lint typecheck security test
+	@echo "All checks passed!"
+
+docker-up:
+	docker compose up -d
+
+docker-down:
+	docker compose down
+
+docker-logs:
+	docker compose logs -f
+
+docker-rebuild:
+	docker compose up -d --build
+
+run:
+	uv run flask --app app.main:app run
+
+clean:
+	rm -rf .pytest_cache
+	rm -rf htmlcov
+	rm -rf .coverage
+	rm -rf __pycache__
+	find . -type d -name __pycache__ -exec rm -rf {} +
+	find . -type d -name "*.egg-info" -exec rm -rf {} +
+	find . -type f -name "*.pyc" -delete
+	find . -type f -name "*.pyo" -delete

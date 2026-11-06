@@ -1,0 +1,32 @@
+repos:
+-   repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.4
+    hooks:
+    -   id: ruff-check
+    -   id: ruff-format
+        exclude: ^LICENSE\.MD$
+-   repo: https://github.com/pycqa/flake8
+    rev: 7.5.0
+    hooks:
+    -   id: flake8
+        additional_dependencies: [flake8-pyproject]
+-   repo: https://github.com/pycqa/bandit
+    rev: 1.9.4
+    hooks:
+    -   id: bandit
+        args: ["-c", "pyproject.toml"]
+        exclude: ^tests/
+-   repo: local
+    hooks:
+    -   id: ty
+        name: ty
+        entry: uv run ty check app
+        language: system
+        types: [python]
+        pass_filenames: false
+-   repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.27.0
+    hooks:
+    -   id: commitlint
+        stages: [commit-msg]
+        additional_dependencies: ['@commitlint/config-conventional']
