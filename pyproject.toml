@@ -1,7 +1,7 @@
 [project]
 name = "iati-cloud-dcma"
 version = "0.1.0"
-description = "Add your description here"
+description = "Delivery Chain Mapping API: the funding chain above and below any IATI activity, read from an IATI.cloud Solr core."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -11,6 +11,8 @@ dependencies = [
     "pydantic>=2.14.3",
     "pydantic-settings>=2.16.2",
     "flasgger>=0.9.7.1",
+    "pysolr>=3.11.0",
+    "redis>=8.1.0",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +27,7 @@ dev = [
     "bandit>=1.9.4",
     "pre-commit>=4.7.0",
     "ty>=0.0.99",
+    "fakeredis>=2.40.0",
 ]
 
 [tool.ruff]
@@ -45,7 +48,10 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
-addopts = "-v --cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=100"
+addopts = "-v -m 'not live' --cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=100"
+markers = [
+    "live: hits the live reference Solr instance; skipped by default, run with `uv run pytest -m live --no-cov`",
+]
 
 [tool.coverage.run]
 source = ["app"]

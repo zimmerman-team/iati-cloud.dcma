@@ -11,8 +11,9 @@ COPY uv.lock .
 COPY app ./app
 COPY data ./data
 
-# Install dependencies using UV (frozen = reproduce lockfile exactly)
-RUN uv sync --frozen --no-dev
+# Install dependencies using UV (frozen = reproduce lockfile exactly). The project itself is not installed:
+# gunicorn imports app.main from WORKDIR, and building it would need README.md, which .dockerignore excludes.
+RUN uv sync --frozen --no-dev --no-install-project
 
 # Add venv binaries to PATH so gunicorn and other entrypoints are found
 ENV PATH="/app/.venv/bin:$PATH"

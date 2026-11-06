@@ -32,11 +32,3 @@ def health_check():
             "timestamp": datetime.now().isoformat(),
         }
     )
-
-
-@bp.route("/iati-cloud-dcma-route", methods=["GET"])
-def demo_route():
-    """
-    A demo route. Requires authentication.
-    """
-    return jsonify({"message": "This is a protected route in the iati-cloud-dcma."})

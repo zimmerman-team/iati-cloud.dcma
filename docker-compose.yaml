@@ -10,12 +10,26 @@ services:
       - "${PORT:-5000}:${PORT:-5000}"
     env_file:
       - .env
+    environment:
+      # Inside compose, Redis is reached by service name; this overrides any REDIS_URL in .env.
+      REDIS_URL: redis://redis:6379/0
     volumes:
       - ./app:/app/app
       - ./data:/app/data
       - ./logs:/app/logs
-    # depends_on:
-    # healthcheck:
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
-# volumes:
+  redis:
+    image: redis:7.4-alpine
+    container_name: iati-cloud-dcma-redis
+    # Response cache only: nothing needs to survive a restart, so persistence is off.
+    command: redis-server --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
