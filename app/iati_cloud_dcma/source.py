@@ -4,13 +4,15 @@ Traversal only talks to a LinkSource, so a future graph store means a new implem
 """
 
 import logging
-from collections.abc import Collection, Iterator
+from collections.abc import Collection, Iterable, Iterator
+from dataclasses import dataclass
 from typing import NoReturn, Protocol, runtime_checkable
 from urllib.parse import urlsplit, urlunsplit
 
 import pysolr
 import requests
 
+from app.iati_cloud_dcma.budget import UNLIMITED, Budget, BudgetExhausted
 from app.iati_cloud_dcma.links import FIELD_IDENTIFIER, SOLR_FIELDS, ActivityDoc, InvalidDocument, normalise_id
 
 logger = logging.getLogger(__name__)
@@ -47,6 +49,14 @@ class SourceTimeout(SourceError):
     """A Solr query timed out."""
 
 
+@dataclass(frozen=True)
+class Mentions:
+    """The answer to a reverse lookup. `complete` is False when it stopped early (time budget or limit)."""
+
+    docs: tuple[ActivityDoc, ...]
+    complete: bool = True
+
+
 @runtime_checkable
 class LinkSource(Protocol):
     @property
@@ -54,12 +64,19 @@ class LinkSource(Protocol):
         """Number of queries this source has sent, for stats.solr_queries."""
         ...
 
-    def fetch(self, ids: Collection[str]) -> dict[str, ActivityDoc]:
-        """The published documents among `ids`, by identifier. Unknown identifiers are absent."""
+    def fetch(self, ids: Collection[str], budget: Budget = UNLIMITED) -> dict[str, ActivityDoc]:
+        """The published documents among `ids`, by identifier. Unknown identifiers are absent.
+
+        Raises BudgetExhausted when the budget runs out first: a partial answer would make published activities look
+        unpublished.
+        """
         ...
 
-    def mentioning(self, ids: Collection[str]) -> list[ActivityDoc]:
-        """Every document whose own links name one of `ids` (spec §5.4)."""
+    def mentioning(self, ids: Collection[str], budget: Budget = UNLIMITED, limit: int | None = None) -> Mentions:
+        """Every document whose own links name one of `ids` (spec §5.4).
+
+        Stops early, with complete=False, when the budget runs out or once `limit` documents are found and more remain.
+        """
         ...
 
     def ping(self) -> bool:
@@ -103,28 +120,28 @@ class SolrLinkSource:
     def query_count(self) -> int:
         return self._query_count
 
-    def fetch(self, ids: Collection[str]) -> dict[str, ActivityDoc]:
+    def fetch(self, ids: Collection[str], budget: Budget = UNLIMITED) -> dict[str, ActivityDoc]:
         docs: dict[str, ActivityDoc] = {}
         for batch in self._batches(ids):
             wanted = frozenset(batch)
             query = f"{FIELD_IDENTIFIER}:({' OR '.join(map(quote_id, batch))})"
-            for doc in self._documents(query, rows=len(batch)):
-                if doc.iati_identifier in wanted and doc.iati_identifier not in docs:
-                    docs[doc.iati_identifier] = doc
+            for page, _more in self._pages(query, len(batch), budget):
+                for doc in page:
+                    if doc.iati_identifier in wanted and doc.iati_identifier not in docs:
+                        docs[doc.iati_identifier] = doc
         return docs
 
-    def mentioning(self, ids: Collection[str]) -> list[ActivityDoc]:
-        docs: dict[str, ActivityDoc] = {}
-        for batch in self._batches(ids):
-            wanted = frozenset(batch)
-            values = " OR ".join(map(quote_id, batch))
-            query = " OR ".join(f"{field}:({values})" for field in MENTION_QUERY_FIELDS)
-            rows = max(MENTION_MIN_ROWS, len(batch) * MENTION_ROWS_PER_ID)
-            for doc in self._documents(query, rows=rows):
-                # Solr matches are candidates only: confirm an exact identifier (tokenised field, spec §5.5).
-                if doc.linked_activity_ids & wanted and doc.iati_identifier not in docs:
-                    docs[doc.iati_identifier] = doc
-        return list(docs.values())
+    def mentioning(self, ids: Collection[str], budget: Budget = UNLIMITED, limit: int | None = None) -> Mentions:
+        found: dict[str, ActivityDoc] = {}
+        try:
+            for batch in self._batches(ids):
+                if limit is not None and len(found) >= limit:
+                    return Mentions(docs=tuple(found.values()), complete=False)
+                if not self._collect_mentions(batch, budget, limit, found):
+                    return Mentions(docs=tuple(found.values()), complete=False)
+        except BudgetExhausted:
+            return Mentions(docs=tuple(found.values()), complete=False)
+        return Mentions(docs=tuple(found.values()))
 
     def ping(self) -> bool:
         try:
@@ -139,18 +156,36 @@ class SolrLinkSource:
         for start in range(0, len(unique), self._batch_size):
             yield unique[start : start + self._batch_size]
 
-    def _documents(self, query: str, rows: int) -> Iterator[ActivityDoc]:
-        """Every matching document, paged with `start`. Invalid documents are logged and skipped."""
+    def _collect_mentions(
+        self, batch: list[str], budget: Budget, limit: int | None, found: dict[str, ActivityDoc]
+    ) -> bool:
+        """Add one batch's confirmed mentions to `found`. False when it stopped at the limit with pages left."""
+        wanted = frozenset(batch)
+        values = " OR ".join(map(quote_id, batch))
+        query = " OR ".join(f"{field}:({values})" for field in MENTION_QUERY_FIELDS)
+        rows = max(MENTION_MIN_ROWS, len(batch) * MENTION_ROWS_PER_ID)
+        for page, more in self._pages(query, rows, budget):
+            for doc in page:
+                # Solr matches are candidates only: confirm an exact identifier (tokenised field, spec §5.5).
+                if doc.linked_activity_ids & wanted and doc.iati_identifier not in found:
+                    found[doc.iati_identifier] = doc
+            if more and limit is not None and len(found) >= limit:
+                return False
+        return True
+
+    def _pages(self, query: str, rows: int, budget: Budget) -> Iterator[tuple[list[ActivityDoc], bool]]:
+        """Each page of matching documents, paged with `start`, and whether more pages follow.
+
+        The budget is checked before every query. Invalid documents are logged and skipped.
+        """
         start = 0
         while True:
+            budget.check()
             results = self._search(query, rows=rows, start=start)
-            for raw in results.docs:
-                try:
-                    yield ActivityDoc.from_solr(raw)
-                except InvalidDocument as exc:
-                    logger.warning("Skipping Solr document: %s", exc)
             start += rows
-            if not results.docs or start >= results.hits:
+            more = bool(results.docs) and start < results.hits
+            yield _parse(results.docs), more
+            if not more:
                 return
 
     def _search(self, query: str, rows: int, start: int) -> pysolr.Results:
@@ -159,6 +194,16 @@ class SolrLinkSource:
             return self._client.search(query, fl=_FL, rows=rows, start=start, sort=SORT)
         except (pysolr.SolrError, requests.RequestException, ValueError) as exc:
             _raise_source_error(exc, query)
+
+
+def _parse(raw_docs: Iterable[dict]) -> list[ActivityDoc]:
+    docs = []
+    for raw in raw_docs:
+        try:
+            docs.append(ActivityDoc.from_solr(raw))
+        except InvalidDocument as exc:
+            logger.warning("Skipping Solr document: %s", exc)
+    return docs
 
 
 def _raise_source_error(exc: Exception, query: str) -> NoReturn:

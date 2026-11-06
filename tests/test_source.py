@@ -7,11 +7,13 @@ import pysolr
 import pytest
 import requests
 
+from app.iati_cloud_dcma.budget import UNLIMITED, Budget, BudgetExhausted
 from app.iati_cloud_dcma.links import SOLR_FIELDS, ActivityDoc
 from app.iati_cloud_dcma.source import (
     MENTION_MIN_ROWS,
     MENTION_ROWS_PER_ID,
     LinkSource,
+    Mentions,
     SolrLinkSource,
     SourceError,
     SourceTimeout,
@@ -19,7 +21,7 @@ from app.iati_cloud_dcma.source import (
     create_solr_client,
     quote_id,
 )
-from tests.conftest import FakeLinkSource, load_activity_fixture
+from tests.conftest import FakeClock, FakeLinkSource, load_activity_fixture
 
 LOGGER = "app.iati_cloud_dcma.source"
 FL = ",".join(SOLR_FIELDS)
@@ -178,7 +180,7 @@ def test_fetch_skips_invalid_documents_and_logs(solr, caplog):
 
 
 def test_mentioning_nothing_makes_no_query(solr):
-    assert _source(solr).mentioning([" "]) == []
+    assert _source(solr).mentioning([" "]) == Mentions(docs=(), complete=True)
     solr.search.assert_not_called()
 
 
@@ -211,22 +213,22 @@ def test_mentioning_drops_tokenised_false_positives(solr):
     # participating-org.activity-id is tokenised: a query for the programme also matches the AAH activity,
     # which only cites the programme's project -408 (seen live on 2026-11-06).
     solr.search.return_value = _results([load_activity_fixture(AAH), load_activity_fixture(PROJECT_408)])
-    docs = _source(solr).mentioning([PROGRAMME])
+    docs = _source(solr).mentioning([PROGRAMME]).docs
     assert [doc.iati_identifier for doc in docs] == [PROJECT_408]
 
 
 def test_mentioning_keeps_links_declared_at_either_end_and_associations(solr):
     raws = [load_activity_fixture(i) for i in (AAH, PROGRAMME, TROCAIRE)]
     solr.search.return_value = _results(raws)
-    assert [d.iati_identifier for d in _source(solr).mentioning([PROJECT_408])] == [AAH, PROGRAMME, TROCAIRE]
+    assert [d.iati_identifier for d in _source(solr).mentioning([PROJECT_408]).docs] == [AAH, PROGRAMME, TROCAIRE]
     solr.search.return_value = _results([load_activity_fixture(TROCAIRE)])
-    assert [d.iati_identifier for d in _source(solr).mentioning(["GB-CHC-1047501-24SOELN2F"])] == [TROCAIRE]
+    assert [d.iati_identifier for d in _source(solr).mentioning(["GB-CHC-1047501-24SOELN2F"]).docs] == [TROCAIRE]
 
 
 def test_mentioning_returns_each_document_once_across_batches(solr):
     both = _raw("BOTH", **{"json.related-activity": [json.dumps({"ref": r, "type": 1}) for r in ("A", "B")]})
     solr.search.side_effect = [_results([both]), _results([both])]
-    docs = _source(solr, batch_size=1).mentioning(["A", "B"])
+    docs = _source(solr, batch_size=1).mentioning(["A", "B"]).docs
     assert [d.iati_identifier for d in docs] == ["BOTH"]
 
 
@@ -235,8 +237,9 @@ def test_mentioning_pages_through_all_matches(solr):
     pages = [[_child_of(f"C-{p}-{n}", "A") for n in range(page_size)] for p in range(2)] + [[_child_of("C-last", "A")]]
     hits = 2 * page_size + 1
     solr.search.side_effect = [_results(page, hits=hits) for page in pages]
-    docs = _source(solr).mentioning(["A"])
-    assert len(docs) == hits
+    mentions = _source(solr).mentioning(["A"])
+    assert len(mentions.docs) == hits
+    assert mentions.complete is True
     assert [params["start"] for _, params in _queries(solr)] == [0, page_size, 2 * page_size]
     assert all(params["rows"] == page_size for _, params in _queries(solr))
 
@@ -244,8 +247,84 @@ def test_mentioning_pages_through_all_matches(solr):
 def test_mentioning_skips_invalid_documents_and_logs(solr, caplog):
     solr.search.return_value = _results([{"iati-identifier": ""}, _child_of("C", "A")])
     with caplog.at_level(logging.WARNING, logger=LOGGER):
-        assert [d.iati_identifier for d in _source(solr).mentioning(["A"])] == ["C"]
+        assert [d.iati_identifier for d in _source(solr).mentioning(["A"]).docs] == ["C"]
     assert len([r for r in caplog.records if r.name == LOGGER and r.levelno == logging.WARNING]) == 1
+
+
+# --- Budget and limit ---------------------------------------------------------------------------------------------
+
+
+def _expired_budget() -> Budget:
+    clock = FakeClock()
+    budget = Budget.of_seconds(1, clock=clock)
+    clock.now += 2
+    return budget
+
+
+def test_fetch_with_expired_budget_raises_before_querying(solr):
+    with pytest.raises(BudgetExhausted):
+        _source(solr).fetch(["A"], budget=_expired_budget())
+    solr.search.assert_not_called()
+
+
+def test_fetch_checks_the_budget_before_every_page(solr):
+    clock = FakeClock()
+    budget = Budget.of_seconds(1, clock=clock)
+
+    def first_page(*_args, **_kwargs):
+        clock.now += 5
+        return _results([_raw("A")], hits=3)
+
+    solr.search.side_effect = first_page
+    with pytest.raises(BudgetExhausted):
+        _source(solr).fetch(["A", "B"], budget=budget)
+    assert solr.search.call_count == 1
+
+
+def test_mentioning_with_expired_budget_is_incomplete_without_querying(solr):
+    assert _source(solr).mentioning(["A"], budget=_expired_budget()) == Mentions(docs=(), complete=False)
+    solr.search.assert_not_called()
+
+
+def test_mentioning_returns_what_it_has_when_the_budget_runs_out_between_pages(solr):
+    clock = FakeClock()
+    budget = Budget.of_seconds(1, clock=clock)
+
+    def first_page(*_args, **_kwargs):
+        clock.now += 5
+        return _results([_child_of("C-1", "A")], hits=MENTION_MIN_ROWS + 1)
+
+    solr.search.side_effect = first_page
+    mentions = _source(solr).mentioning(["A"], budget=budget)
+    assert [d.iati_identifier for d in mentions.docs] == ["C-1"]
+    assert mentions.complete is False
+
+
+def test_mentioning_stops_paging_once_the_limit_is_reached(solr):
+    first = [_child_of(f"C-{n:03d}", "A") for n in range(MENTION_MIN_ROWS)]
+    solr.search.side_effect = [_results(first, hits=3 * MENTION_MIN_ROWS)]
+    mentions = _source(solr).mentioning(["A"], limit=MENTION_MIN_ROWS)
+    assert len(mentions.docs) == MENTION_MIN_ROWS
+    assert mentions.complete is False
+    assert solr.search.call_count == 1
+
+
+def test_mentioning_limit_also_stops_before_the_next_batch(solr):
+    solr.search.return_value = _results([_child_of("C-1", "A")])
+    mentions = _source(solr, batch_size=1).mentioning(["A", "B"], limit=1)
+    assert [d.iati_identifier for d in mentions.docs] == ["C-1"]
+    assert mentions.complete is False
+    assert solr.search.call_count == 1
+
+
+def test_mentioning_reaching_the_limit_on_the_last_page_is_complete(solr):
+    solr.search.return_value = _results([_child_of("C-1", "A"), _child_of("C-2", "A")])
+    assert _source(solr).mentioning(["A"], limit=2).complete is True
+
+
+def test_default_budget_is_unlimited(solr):
+    _source(solr).fetch(["A"], budget=UNLIMITED)
+    assert solr.search.call_count == 1
 
 
 # --- Errors -------------------------------------------------------------------------------------------------------
@@ -409,7 +488,7 @@ def test_fake_link_source_from_fixtures():
     fake = FakeLinkSource.from_fixtures(PROGRAMME, PROJECT_408, AAH, TROCAIRE, NRC)
     assert isinstance(fake, LinkSource)
     assert set(fake.fetch([PROJECT_408, "UNPUBLISHED"])) == {PROJECT_408}
-    assert [d.iati_identifier for d in fake.mentioning([PROJECT_408])] == [AAH, PROGRAMME, TROCAIRE]
+    assert [d.iati_identifier for d in fake.mentioning([PROJECT_408]).docs] == [AAH, PROGRAMME, TROCAIRE]
     assert fake.calls == [("fetch", frozenset({PROJECT_408, "UNPUBLISHED"})), ("mentioning", frozenset({PROJECT_408}))]
     assert fake.query_count == 2
     assert fake.ping() is True

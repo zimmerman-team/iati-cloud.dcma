@@ -84,8 +84,7 @@ class Organisation:
 
     @property
     def structured_ref(self) -> bool:
-        """False when the ref contains whitespace: in practice a name or a note typed into @ref, not an identifier."""
-        return not any(char.isspace() for char in self.ref)
+        return is_structured_ref(self.ref)
 
 
 @dataclass(frozen=True)
@@ -133,7 +132,7 @@ class ActivityDoc:
         own = self.iati_identifier
         edge_ends = (edge.upstream if edge.downstream == own else edge.downstream for edge in self.edges)
         association_ends = (a for association in self.associations for a in association.activities if a != own)
-        return frozenset(end for end in chain(edge_ends, association_ends) if not end.startswith(ORG_PREFIX))
+        return frozenset(end for end in chain(edge_ends, association_ends) if not is_org_node(end))
 
 
 def normalise_id(value: object) -> str | None:
@@ -145,6 +144,19 @@ def normalise_id(value: object) -> str | None:
 
 def org_node_id(ref: str) -> NodeId:
     return f"{ORG_PREFIX}{ref}"
+
+
+def is_org_node(node_id: NodeId) -> bool:
+    return node_id.startswith(ORG_PREFIX)
+
+
+def org_ref_of(node_id: NodeId) -> str:
+    return node_id[len(ORG_PREFIX) :]
+
+
+def is_structured_ref(ref: str) -> bool:
+    """False when the ref contains whitespace: in practice a name or a note typed into @ref, not an identifier (Q7)."""
+    return not any(char.isspace() for char in ref)
 
 
 def extract(raw_doc: Mapping[str, Any]) -> Links:

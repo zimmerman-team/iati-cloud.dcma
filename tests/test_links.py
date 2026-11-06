@@ -13,8 +13,11 @@ from app.iati_cloud_dcma.links import (
     Links,
     Organisation,
     extract,
+    is_org_node,
+    is_structured_ref,
     normalise_id,
     org_node_id,
+    org_ref_of,
 )
 
 X = "XX-TEST-1"
@@ -594,3 +597,11 @@ def test_linked_activity_ids_exclude_organisation_nodes(activity_fixture):
 
 def test_linked_activity_ids_of_document_without_links():
     assert ActivityDoc.from_solr({"iati-identifier": X}).linked_activity_ids == frozenset()
+
+
+def test_org_node_helpers():
+    assert is_org_node("org:GB-CHC-1") is True
+    assert is_org_node("GB-CHC-1") is False
+    assert org_ref_of("org:GB-CHC-1") == "GB-CHC-1"
+    assert is_structured_ref("GB-CHC-1") is True
+    assert is_structured_ref("BRAC UK") is False
