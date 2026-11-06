@@ -16,8 +16,8 @@ _HEALTH_RESPONSE = {
 _SWAGGER_TEMPLATE = {
     "swagger": "2.0",
     "info": {
-        "title": "iati-cloud.dcma API",
-        "description": "API documentation for the iati-cloud.dcma project.",
+        "title": "iati-cloud-dcma API",
+        "description": "API documentation for the iati-cloud-dcma project.",
         "version": "0.1.0",
     },
     "basePath": "/",
@@ -48,13 +48,13 @@ def init_swagger(app: Flask) -> Swagger:
             "specs": [
                 {
                     "endpoint": "apispec",
-                    "route": "/iati-cloud.dcma/apispec.json",
+                    "route": "/iati-cloud-dcma/apispec.json",
                     "rule_filter": lambda _r: True,
                     "model_filter": lambda _t: True,
                 }
             ],
             "static_url_path": "/flasgger_static",
             "swagger_ui": True,
-            "specs_route": "/iati-cloud.dcma/docs/",
+            "specs_route": "/iati-cloud-dcma/docs/",
         },
     )

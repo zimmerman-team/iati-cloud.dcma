@@ -21,7 +21,7 @@ wheels = [
 ]
 
 [[package]]
-name = "iati-cloud.dcma"
+name = "iati-cloud-dcma"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

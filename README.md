@@ -3,7 +3,7 @@
 ## Features
 
 - **Flask REST API** with CORS, Swagger UI, and API key authentication
-- **Flasgger** provides a Swagger UI at `/iati-cloud.dcma/docs/`, spec at `/iati-cloud.dcma/apispec.json`
+- **Flasgger** provides a Swagger UI at `/iati-cloud-dcma/docs/`, spec at `/iati-cloud-dcma/apispec.json`
 - **Pydantic settings** loaded from `.env` for typed configuration
 - **Pre-commit hooks** enforcing formatting, linting, type checks, security scanning, and conventional commits
 - **100% test coverage** enforced via pytest-cov

@@ -1,7 +1,7 @@
 .PHONY: help install dev-install test test-quiet test-verbose lint format format-check typecheck security check-all docker-up docker-down docker-logs docker-rebuild run clean
 
 help:
-	@echo "iati-cloud.dcma - Make Commands"
+	@echo "iati-cloud-dcma - Make Commands"
 	@echo ""
 	@echo "  make install        - Install production dependencies"
 	@echo "  make dev-install    - Install development dependencies"

@@ -1,1 +1,1 @@
-"""Models for the iati-cloud.dcma application."""
+"""Models for the iati-cloud-dcma application."""

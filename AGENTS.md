@@ -27,8 +27,8 @@ To exempt a route from API key auth, add it to `AUTH_EXEMPT_PATHS` in `app/bluep
 
 ## Swagger
 
-- UI: `/iati-cloud.dcma/docs/`
-- Spec: `/iati-cloud.dcma/apispec.json`
+- UI: `/iati-cloud-dcma/docs/`
+- Spec: `/iati-cloud-dcma/apispec.json`
 
 ## Reference
 

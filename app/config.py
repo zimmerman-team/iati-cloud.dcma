@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.blueprint import AUTH_EXEMPT_PATHS as _BLUEPRINT_EXEMPT_PATHS
 
-_URL_PREFIX = "/iati-cloud.dcma"
+_URL_PREFIX = "/iati-cloud-dcma"
 
 logger = logging.getLogger("app.config")
 
@@ -19,7 +19,7 @@ def setup_logging() -> None:
 
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-    file_handler = RotatingFileHandler(os.path.join(_LOG_DIR, "iati-cloud.dcma.log"), maxBytes=LOG_SIZE, backupCount=5)
+    file_handler = RotatingFileHandler(os.path.join(_LOG_DIR, "iati-cloud-dcma.log"), maxBytes=LOG_SIZE, backupCount=5)
     file_handler.setFormatter(formatter)
 
     console_handler = logging.StreamHandler()

@@ -15,7 +15,7 @@ def create_app() -> Flask:
     """Factory function to create and configure the Flask app."""
     app = Flask(__name__)
     CORS(app, origins=settings.cors_allowed_origins)
-    app.register_blueprint(bp, url_prefix="/iati-cloud.dcma")
+    app.register_blueprint(bp, url_prefix="/iati-cloud-dcma")
 
     @app.before_request
     def require_api_key():

@@ -5,7 +5,7 @@ from flask import Blueprint, jsonify
 
 logger = logging.getLogger("app")
 
-bp = Blueprint("iati-cloud.dcma", __name__)
+bp = Blueprint("iati-cloud-dcma", __name__)
 
 AUTH_EXEMPT_PATHS: set[str] = {"/docs/", "/apispec.json", "/health-check"}
 
@@ -34,9 +34,9 @@ def health_check():
     )
 
 
-@bp.route("/iati-cloud.dcma-route", methods=["GET"])
+@bp.route("/iati-cloud-dcma-route", methods=["GET"])
 def demo_route():
     """
     A demo route. Requires authentication.
     """
-    return jsonify({"message": "This is a protected route in the iati-cloud.dcma."})
+    return jsonify({"message": "This is a protected route in the iati-cloud-dcma."})

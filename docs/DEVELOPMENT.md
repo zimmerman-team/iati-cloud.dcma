@@ -3,9 +3,9 @@
 ## Project Structure
 
 ```
-iati-cloud.dcma/
+iati-cloud-dcma/
 ├── app/
-│   ├── iati-cloud.dcma/
+│   ├── iati-cloud-dcma/
 │   |   └── __init__.py  # Content of the actual feature goes in this directory
 │   ├── blueprint.py     # Flask routes
 │   ├── main.py          # Flask app, routes, auth middleware
@@ -37,7 +37,7 @@ Basic directory rules:
 **Step 1**: Add the route to `app/main.py`
 
 ```python
-@app.route("/iati-cloud.dcma/my-endpoint", methods=["GET"])
+@app.route("/iati-cloud-dcma/my-endpoint", methods=["GET"])
 def my_endpoint():
     """
     Endpoint description.
@@ -55,7 +55,7 @@ def my_endpoint():
 
 ```python
 def test_my_endpoint(client, auth_headers):
-    response = client.get("/iati-cloud.dcma/my-endpoint", headers=auth_headers)
+    response = client.get("/iati-cloud-dcma/my-endpoint", headers=auth_headers)
     assert response.status_code == 200
 ```
 
