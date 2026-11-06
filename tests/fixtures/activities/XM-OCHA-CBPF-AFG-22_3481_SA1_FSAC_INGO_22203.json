@@ -1,0 +1,25 @@
+{
+  "hierarchy": 2,
+  "iati-identifier": "XM-OCHA-CBPF-AFG-22/3481/SA1/FSAC/INGO/22203",
+  "reporting-org.ref": "XM-OCHA-CBPF",
+  "reporting-org.narrative": [
+    "United Nations Office for the Coordination of Humanitarian Affairs"
+  ],
+  "title.narrative": [
+    "Emergency Cash for Food Assistance to IPC 3 and 4 populations of Parwan Province"
+  ],
+  "activity-status.code": "4",
+  "json.participating-org": [
+    "{\"ref\": \"\", \"role\": 2, \"type\": 21, \"activity-id\": \"\", \"narrative\": \"Norwegian Afghanistan Committee\", \"narrative.lang\": \" \"}",
+    "{\"ref\": \"\", \"role\": 4, \"type\": 21, \"activity-id\": \"\", \"narrative\": \"Norwegian Afghanistan Committee\", \"narrative.lang\": \" \"}",
+    "{\"ref\": \"XM-OCHA-CBPF-AFG23\", \"role\": 1, \"type\": 40, \"activity-id\": \"XM-OCHA-CBPF-AFG23-2022\", \"narrative\": \"Afghanistan Humanitarian Fund\", \"narrative.lang\": \" \"}"
+  ],
+  "json.transaction": [
+    "{\"ref\": \"AFG23-22203\", \"humanitarian\": 1, \"transaction-type\": {\"code\": 2}, \"transaction-date\": {\"iso-date\": \"2022-08-11\"}, \"value\": 700000.0, \"provider-org\": {\"provider-activity-id\": \"XM-OCHA-CBPF-AFG23-2022\", \"type\": 40, \"ref\": \"XM-OCHA-CBPF-AFG23\", \"narrative\": \"Afghanistan Humanitarian Fund\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"narrative\": \"Norwegian Afghanistan Committee\", \"narrative.lang\": \" \"}, \"value.currency\": \"USD\", \"value.value-date\": \"2022-08-11\"}",
+    "{\"ref\": 3305754921, \"humanitarian\": 1, \"transaction-type\": {\"code\": 3}, \"transaction-date\": {\"iso-date\": \"2022-08-23\"}, \"value\": 420000.0, \"provider-org\": {\"provider-activity-id\": \"XM-OCHA-CBPF-AFG23-2022\", \"type\": 40, \"ref\": \"XM-OCHA-CBPF-AFG23\", \"narrative\": \"Afghanistan Humanitarian Fund\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"narrative\": \"Norwegian Afghanistan Committee\", \"narrative.lang\": \" \"}, \"value.currency\": \"USD\", \"value.value-date\": \"2022-08-23\"}",
+    "{\"ref\": 3306407320, \"humanitarian\": 1, \"transaction-type\": {\"code\": 3}, \"transaction-date\": {\"iso-date\": \"2023-08-11\"}, \"value\": 280000.0, \"provider-org\": {\"provider-activity-id\": \"XM-OCHA-CBPF-AFG23-2022\", \"type\": 40, \"ref\": \"XM-OCHA-CBPF-AFG23\", \"narrative\": \"Afghanistan Humanitarian Fund\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"narrative\": \"Norwegian Afghanistan Committee\", \"narrative.lang\": \" \"}, \"value.currency\": \"USD\", \"value.value-date\": \"2023-08-11\"}"
+  ],
+  "json.related-activity": [
+    "{\"ref\": \"XM-OCHA-CBPF-AFG23-2022\", \"type\": 1}"
+  ]
+}

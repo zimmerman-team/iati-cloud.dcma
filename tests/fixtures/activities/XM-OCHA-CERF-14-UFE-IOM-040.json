@@ -1,0 +1,19 @@
+{
+  "hierarchy": 1,
+  "iati-identifier": "XM-OCHA-CERF-14-UFE-IOM-040",
+  "reporting-org.ref": "XM-OCHA-CERF",
+  "reporting-org.narrative": [
+    "UNOCHA - Central Emergency Response Fund (CERF)"
+  ],
+  "title.narrative": [
+    "Life-saving livelihood support to drought affected agro-pastoral communities in Afgoye District, Lower Shabelle Region"
+  ],
+  "activity-status.code": "4",
+  "json.participating-org": [
+    "{\"ref\": \"XM-OCHA-CERF\", \"role\": 1, \"activity-id\": \"XM-OCHA-CERF\", \"type\": 40, \"crs-channel-code\": 41147, \"narrative\": \"\\n            OCHA Central Emergency Response Fund (CERF)\\n          \", \"narrative.lang\": \" \"}",
+    "{\"ref\": \"XM-DAC-47066\", \"role\": 2, \"type\": 40, \"narrative\": \"International Organization for Migration (IOM)\", \"narrative.lang\": \" \"}"
+  ],
+  "json.transaction": [
+    "{\"ref\": \"XM-OCHA-CERF-14-UFE-IOM-040\", \"humanitarian\": 1, \"transaction-type\": {\"code\": 3}, \"transaction-date\": {\"iso-date\": \"2014-10-14\"}, \"value\": 286214.0, \"description\": {\"narrative\": \"\\n            Disbursement to CERF Project Life-saving livelihood support to drought affected agro-pastoral communities in Afgoye District, Lower Shabelle Region\", \"narrative.lang\": \" \"}, \"provider-org\": {\"ref\": \"XM-OCHA-CERF\", \"type\": 40, \"narrative\": \"OCHA Central Emergency Response Fund (CERF)\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"XM-DAC-47066\", \"narrative\": \"International Organization for Migration (IOM)\", \"narrative.lang\": \" \"}, \"disbursement-channel\": {\"code\": 2}, \"sector\": {\"vocabulary\": 1, \"code\": 72010}, \"value.currency\": \"USD\", \"value.value-date\": \"2014-10-14\"}"
+  ]
+}
