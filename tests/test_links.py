@@ -571,3 +571,26 @@ def test_fixture_cerf_org_ref_as_activity_id(activity_fixture):
         _edge(CERF, "org:XM-DAC-47066", "transaction", CERF),
     }
     assert links.organisations == {Organisation("XM-DAC-47066", "International Organization for Migration (IOM)")}
+
+
+# --- ActivityDoc.linked_activity_ids ------------------------------------------------------------------------------
+
+
+def test_linked_activity_ids_are_the_other_ends_of_edges_and_associations():
+    doc = ActivityDoc.from_solr(
+        _doc(
+            related=[{"ref": "P-1", "type": 1}, {"ref": "C-1", "type": 2}],
+            participating=[{"role": 3, "activity-id": "A-1"}, {"role": 2, "activity-id": "ZZ-A-2"}],
+            transactions=[_tx(receiver={"ref": "R-ORG"}, provider={"ref": "P-ORG"})],
+        )
+    )
+    assert doc.linked_activity_ids == {"P-1", "C-1", "A-1", "ZZ-A-2"}
+
+
+def test_linked_activity_ids_exclude_organisation_nodes(activity_fixture):
+    doc = ActivityDoc.from_solr(activity_fixture(AAH))
+    assert doc.linked_activity_ids == {PROJECT_408}
+
+
+def test_linked_activity_ids_of_document_without_links():
+    assert ActivityDoc.from_solr({"iati-identifier": X}).linked_activity_ids == frozenset()

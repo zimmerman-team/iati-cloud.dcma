@@ -127,6 +127,14 @@ class ActivityDoc:
             organisations=links.organisations,
         )
 
+    @property
+    def linked_activity_ids(self) -> frozenset[str]:
+        """The activities at the other end of this document's edges and associations. Organisations are left out."""
+        own = self.iati_identifier
+        edge_ends = (edge.upstream if edge.downstream == own else edge.downstream for edge in self.edges)
+        association_ends = (a for association in self.associations for a in association.activities if a != own)
+        return frozenset(end for end in chain(edge_ends, association_ends) if not end.startswith(ORG_PREFIX))
+
 
 def normalise_id(value: object) -> str | None:
     """Trim an identifier or ref; coerce numbers to str. Blank or non-scalar values give None."""
