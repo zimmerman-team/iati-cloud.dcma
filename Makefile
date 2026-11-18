@@ -1,4 +1,11 @@
-.PHONY: help install dev-install test test-quiet test-verbose lint format format-check typecheck security check-all docker-up docker-down docker-logs docker-rebuild run clean
+.PHONY: help install dev-install test test-quiet test-verbose lint format format-check typecheck security check-all docker-up docker-down docker-logs docker-rebuild run clean pdf
+
+# `make pdf docs/X.md` passes the file as a second goal; turn it into an argument instead of a target to build.
+ifeq (pdf,$(firstword $(MAKECMDGOALS)))
+  PDF_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  .PHONY: $(PDF_ARGS)
+  $(eval $(PDF_ARGS):;@:)
+endif
 
 help:
 	@echo "iati-cloud-dcma - Make Commands"
@@ -18,6 +25,7 @@ help:
 	@echo "  make docker-logs    - Follow Docker service logs"
 	@echo "  make docker-rebuild - Rebuild and start Docker services"
 	@echo "  make run            - Run Flask development server"
+	@echo "  make pdf <file.md>  - Render a markdown file to PDF (next to it, or FILE=... OUT=...)"
 	@echo "  make clean          - Remove build artifacts"
 	@echo ""
 
@@ -71,6 +79,9 @@ docker-rebuild:
 
 run:
 	uv run flask --app app.main:app run
+
+pdf:
+	scripts/md_to_pdf.sh $(or $(FILE),$(PDF_ARGS)) $(OUT)
 
 clean:
 	rm -rf .pytest_cache

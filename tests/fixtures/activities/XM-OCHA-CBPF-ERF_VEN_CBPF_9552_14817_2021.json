@@ -1,0 +1,25 @@
+{
+  "last-updated-datetime": "2021-09-14T11:35:00Z",
+  "hierarchy": 2,
+  "iati-identifier": "XM-OCHA-CBPF-ERF/VEN_CBPF/9552/14817/2021",
+  "reporting-org.ref": "XM-OCHA-CBPF",
+  "reporting-org.narrative": [
+    "United Nations Office for the Coordination of Humanitarian Affairs"
+  ],
+  "title.narrative": [
+    "Norway provides the fund to Venezuela (2021)"
+  ],
+  "activity-status.code": "3",
+  "json.participating-org": [
+    "{\"ref\": \"NO-BRC-971277882\", \"role\": 1, \"type\": 10, \"activity-id\": \"\", \"narrative\": \"Norway\", \"narrative.lang\": \" \"}",
+    "{\"ref\": \"XM-OCHA-CBPF-VEN83\", \"role\": 2, \"type\": 40, \"activity-id\": \"XM-OCHA-CBPF-VEN83-2021\", \"narrative\": \"Venezuela Humanitarian Fund\", \"narrative.lang\": \" \"}"
+  ],
+  "json.transaction": [
+    "{\"ref\": \"ERF/VEN_CBPF/9552/14817/2021/1\", \"humanitarian\": 1, \"transaction-type\": {\"code\": 1}, \"transaction-date\": {\"iso-date\": \"2021-04-30\"}, \"value\": 400134.4, \"provider-org\": {\"type\": 10, \"ref\": \"NO-BRC-971277882\", \"narrative\": \"Norway\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"receiver-activity-id\": \"XM-OCHA-CBPF-VEN83-2021\", \"type\": 40, \"ref\": \"XM-OCHA-CBPF-VEN83\", \"narrative\": \"Venezuela Humanitarian Fund\", \"narrative.lang\": \" \"}, \"value.currency\": \"USD\", \"value.value-date\": \"2021-04-30\"}",
+    "{\"ref\": \"ERF/VEN_CBPF/9552/14817/2021/11\", \"humanitarian\": 1, \"transaction-type\": {\"code\": 11}, \"transaction-date\": {\"iso-date\": \"2021-04-13\"}, \"value\": 385378.96, \"provider-org\": {\"type\": 10, \"ref\": \"NO-BRC-971277882\", \"narrative\": \"Norway\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"receiver-activity-id\": \"XM-OCHA-CBPF-VEN83-2021\", \"type\": 40, \"ref\": \"XM-OCHA-CBPF-VEN83\", \"narrative\": \"Venezuela Humanitarian Fund\", \"narrative.lang\": \" \"}, \"value.currency\": \"USD\", \"value.value-date\": \"2021-04-13\"}"
+  ],
+  "json.related-activity": [
+    "{\"ref\": \"XM-OCHA-CBPF-VEN83-2021\", \"type\": 1}"
+  ],
+  "id": "5550a623-31a5-4e80-b47e-72350aa1e5a5"
+}

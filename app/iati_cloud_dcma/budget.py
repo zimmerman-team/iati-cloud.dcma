@@ -1,4 +1,4 @@
-"""The time budget of one request (spec §8: REQUEST_TIMEOUT).
+"""The time budget of one request, set by REQUEST_TIMEOUT.
 
 The traversal and the link source check it before each Solr query. When it runs out, the result is truncated rather
 than an error.

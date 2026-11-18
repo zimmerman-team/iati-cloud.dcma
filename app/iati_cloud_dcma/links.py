@@ -1,18 +1,34 @@
-"""Link extraction: one Solr activity document → edges (L1–L6, O1–O2), associations (L7) and organisations.
+"""Turns one IATI activity document from Solr into the links it declares.
 
-Everything here is pure: no Solr access, no shared state. See spec §5.2, §5.3 and §5.5.
+Everything here is pure: no Solr calls, no state. Links are expressed in node keys (see `nodes`); the original
+spellings travel along in `labels`, so callers can be shown what the publisher wrote.
 """
 
 import json
 import logging
 from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from itertools import chain
 from typing import Any, Literal
 
+from app.iati_cloud_dcma.nodes import (
+    Identification,
+    NodeId,
+    identification_of,
+    is_org_node,
+    node_key,
+    normalise_id,
+    normalise_name,
+    org_name_node_id,
+    org_node_id,
+)
+
 logger = logging.getLogger(__name__)
 
-# Solr fields read from each activity document (spec §5.6).
+# Solr fields read from each activity document.
+FIELD_DOC_ID = "id"
+FIELD_LAST_UPDATED = "last-updated-datetime"
 FIELD_IDENTIFIER = "iati-identifier"
 FIELD_TITLE = "title.narrative"
 FIELD_REPORTING_ORG_REF = "reporting-org.ref"
@@ -24,7 +40,9 @@ FIELD_TRANSACTION = "json.transaction"
 FIELD_PARTICIPATING_ORG = "json.participating-org"
 
 SOLR_FIELDS: tuple[str, ...] = (
+    FIELD_DOC_ID,
     FIELD_IDENTIFIER,
+    FIELD_LAST_UPDATED,
     FIELD_TITLE,
     FIELD_REPORTING_ORG_REF,
     FIELD_REPORTING_ORG_NAME,
@@ -35,17 +53,18 @@ SOLR_FIELDS: tuple[str, ...] = (
     FIELD_PARTICIPATING_ORG,
 )
 
-NodeId = str  # activity: IATI identifier; organisation: "org:<ref>"
+# Types
 EdgeKind = Literal["hierarchy", "transaction", "participating-org"]
 AssociationRole = Literal[2, 3]
-
-ORG_PREFIX = "org:"
 
 _RELATED_PARENT = 1
 _RELATED_CHILD = 2
 _ROLE_FUNDING = 1
 _ROLE_IMPLEMENTING = 4
 _ASSOCIATION_ROLES: dict[int, AssociationRole] = {2: 2, 3: 3}  # accountable, extending
+# Transactions that send money on: outgoing commitment, disbursement, expenditure and outgoing pledge. Only these say
+# that the receiver is funded by the declaring activity; an incoming transaction's receiver is the activity itself.
+OUTGOING_TRANSACTION_TYPES = frozenset({2, 3, 4, 12})
 
 
 class InvalidDocument(ValueError):
@@ -54,53 +73,55 @@ class InvalidDocument(ValueError):
 
 @dataclass(frozen=True)
 class Edge:
-    """A directed link upstream → downstream (funder → funded), declared by one activity."""
+    """A directed link upstream to downstream (funder to funded), declared by one activity. All three are node keys."""
 
     upstream: NodeId
     downstream: NodeId
     kind: EdgeKind
-    declared_by: str
+    declared_by: NodeId
 
 
 @dataclass(frozen=True)
 class Association:
-    """A non-directional relation from participating-org role 2 or 3 (L7). Shown, never followed."""
+    """Two activities linked through a participating-org with role 2 (accountable) or 3 (extending).
 
-    activities: tuple[str, str]  # sorted
+    These say who is responsible for an activity, not who pays whom, so they have no direction. They are shown in the
+    result but never walked.
+    """
+
+    activities: tuple[NodeId, NodeId]  # sorted
     role: AssociationRole
-    declared_by: str
+    declared_by: NodeId
 
 
 @dataclass(frozen=True)
 class Organisation:
-    """An organisation named by ref in a transaction that gives no activity ID (O1, O2)."""
+    """An organisation named where no activity is named."""
 
-    ref: str
-    name: str | None
-
-    @property
-    def node_id(self) -> NodeId:
-        return org_node_id(self.ref)
+    node_id: NodeId
+    ref: str | None  # None for a name-only organisation
+    name: str | None  # None for a ref-only organisation
 
     @property
-    def structured_ref(self) -> bool:
-        return is_structured_ref(self.ref)
+    def identification(self) -> Identification:
+        return identification_of(self.node_id)
 
 
 @dataclass(frozen=True)
 class Links:
-    """Everything one activity document declares about its links."""
+    """Everything one activity declares about its links."""
 
     edges: frozenset[Edge] = frozenset()
     associations: frozenset[Association] = frozenset()
     organisations: frozenset[Organisation] = frozenset()
+    labels: frozenset[tuple[NodeId, str]] = frozenset()
 
 
 @dataclass(frozen=True)
 class ActivityDoc:
-    """An activity's metadata and the links its own document declares."""
+    """An activity's metadata and the links it declares. One per identifier: see `merge`."""
 
-    iati_identifier: str
+    iati_identifier: str  # as published
     title: str | None
     reporting_org_ref: str | None
     reporting_org_name: str | None
@@ -109,6 +130,9 @@ class ActivityDoc:
     edges: frozenset[Edge]
     associations: frozenset[Association]
     organisations: frozenset[Organisation]
+    labels: frozenset[tuple[NodeId, str]] = frozenset()
+    doc_id: str | None = None
+    last_updated: str | None = None
 
     @classmethod
     def from_solr(cls, raw_doc: Mapping[str, Any]) -> "ActivityDoc":
@@ -124,68 +148,83 @@ class ActivityDoc:
             edges=links.edges,
             associations=links.associations,
             organisations=links.organisations,
+            labels=links.labels,
+            doc_id=normalise_id(_first(raw_doc.get(FIELD_DOC_ID))),
+            last_updated=normalise_id(_first(raw_doc.get(FIELD_LAST_UPDATED))),
+        )
+
+    @classmethod
+    def merge(cls, copies: Iterable["ActivityDoc"]) -> "ActivityDoc":
+        """One document for several copies of the same identifier.
+
+        Links are the union over all copies.
+        Metadata comes from the copy updated last; a copy without a date counts as oldest,
+        and ties go to the lowest document id.
+        The result does not depend on the order of `copies`.
+        """
+        ordered = sorted(copies, key=lambda copy: (copy.doc_id or "", copy.iati_identifier))
+        newest = max(ordered, key=lambda copy: _timestamp(copy.last_updated))  # max keeps the first of equals
+        if len(ordered) == 1:
+            return newest
+        return replace(
+            newest,
+            edges=frozenset().union(*(copy.edges for copy in ordered)),
+            associations=frozenset().union(*(copy.associations for copy in ordered)),
+            organisations=frozenset().union(*(copy.organisations for copy in ordered)),
+            labels=frozenset().union(*(copy.labels for copy in ordered)),
         )
 
     @property
-    def linked_activity_ids(self) -> frozenset[str]:
-        """The activities at the other end of this document's edges and associations. Organisations are left out."""
-        own = self.iati_identifier
+    def key(self) -> NodeId:
+        return node_key(self.iati_identifier)
+
+    @property
+    def linked_activity_ids(self) -> frozenset[NodeId]:
+        """Keys of the activities at the other end of this document's edges and associations, without organisations."""
+        own = self.key
         edge_ends = (edge.upstream if edge.downstream == own else edge.downstream for edge in self.edges)
         association_ends = (a for association in self.associations for a in association.activities if a != own)
         return frozenset(end for end in chain(edge_ends, association_ends) if not is_org_node(end))
 
 
-def normalise_id(value: object) -> str | None:
-    """Trim an identifier or ref; coerce numbers to str. Blank or non-scalar values give None."""
-    if isinstance(value, bool) or not isinstance(value, (str, int)):
-        return None
-    return str(value).strip() or None
-
-
-def org_node_id(ref: str) -> NodeId:
-    return f"{ORG_PREFIX}{ref}"
-
-
-def is_org_node(node_id: NodeId) -> bool:
-    return node_id.startswith(ORG_PREFIX)
-
-
-def org_ref_of(node_id: NodeId) -> str:
-    return node_id[len(ORG_PREFIX) :]
-
-
-def is_structured_ref(ref: str) -> bool:
-    """False when the ref contains whitespace: in practice a name or a note typed into @ref, not an identifier (Q7)."""
-    return not any(char.isspace() for char in ref)
-
-
 def extract(raw_doc: Mapping[str, Any]) -> Links:
-    """Extract L1–L7 and O1–O2 from one raw Solr activity document (spec §5.2, §5.3).
+    """Extract links from one raw Solr activity document.
 
     Unparseable link values are logged and skipped. Raises InvalidDocument when the document has no identifier.
     """
-    activity_id = _require_identifier(raw_doc)
-    related = _json_objects(raw_doc, FIELD_RELATED_ACTIVITY, activity_id)
-    transactions = _json_objects(raw_doc, FIELD_TRANSACTION, activity_id)
-    participating = _json_objects(raw_doc, FIELD_PARTICIPATING_ORG, activity_id)
-
-    org_mentions = list(_org_mentions(transactions, activity_id, _reporting_org_ref(raw_doc)))
-    edges = chain(
-        _related_edges(related, activity_id),
-        _transaction_edges(transactions, activity_id),
-        _participating_edges(participating, activity_id),
-        (edge for edge, _ref, _name in org_mentions),
+    identifier = _require_identifier(raw_doc)
+    own = _Own(
+        key=node_key(identifier),
+        org_ref=_fold_or_none(_reporting_org_ref(raw_doc)),
+        org_name=_name_or_none(_first_text(raw_doc.get(FIELD_REPORTING_ORG_NAME))),
     )
+    related = _json_objects(raw_doc, FIELD_RELATED_ACTIVITY, identifier)
+    transactions = _json_objects(raw_doc, FIELD_TRANSACTION, identifier)
+    participating = _json_objects(raw_doc, FIELD_PARTICIPATING_ORG, identifier)
+
+    activity_links = list(
+        chain(
+            _related_links(related, own),
+            _transaction_links(transactions, own),
+            _participating_links(participating, own),
+        )
+    )
+    org_links = list(chain(_transaction_org_links(transactions, own), _participating_org_links(participating, own)))
     return Links(
-        edges=frozenset(edges),
-        associations=frozenset(_associations(participating, activity_id)),
-        organisations=_organisations(org_mentions),
+        edges=frozenset(chain((edge for edge, _spelling in activity_links), (edge for edge, _org in org_links))),
+        associations=frozenset(association for association, _spelling in _associations(participating, own)),
+        organisations=_organisations(org for _edge, org in org_links),
+        labels=frozenset(
+            (node_key(spelling), spelling)
+            for spelling in chain(
+                (spelling for _edge, spelling in activity_links),
+                (spelling for _association, spelling in _associations(participating, own)),
+            )
+        ),
     )
 
 
-# --- Document-level helpers ---------------------------------------------------------------------------------------
-
-
+# Document-level helpers
 def _require_identifier(raw_doc: Mapping[str, Any]) -> str:
     identifier = normalise_id(raw_doc.get(FIELD_IDENTIFIER))
     if identifier is None:
@@ -250,29 +289,71 @@ def _as_int(value: object) -> int | None:
     return None
 
 
-def _directed(other: NodeId, activity_id: str, other_is_upstream: bool, kind: EdgeKind) -> Edge:
+@dataclass(frozen=True)
+class _Own:
+    """The declaring activity: its key, and its reporting organisation for the "not itself" checks."""
+
+    key: NodeId
+    org_ref: str | None  # case-folded
+    org_name: str | None  # normalised
+
+    def is_reporting_org(self, ref: str | None, name: str | None) -> bool:
+        """Whether an element names the reporting organisation. Compared by ref when both sides have one, else by name."""
+        if ref is not None and self.org_ref is not None:
+            return ref.casefold() == self.org_ref
+        return name is not None and self.org_name is not None and normalise_name(name) == self.org_name
+
+
+def _fold_or_none(value: str | None) -> str | None:
+    return value.casefold() if value is not None else None
+
+
+_OLDEST = datetime.min.replace(tzinfo=UTC)
+
+
+def _timestamp(value: str | None) -> datetime:
+    """A last-updated value as a moment in time, used to pick the newest copy of a duplicated identifier. Missing or
+    unreadable values count as oldest."""
+    try:
+        moment = datetime.fromisoformat(value) if value is not None else _OLDEST
+    except ValueError:
+        return _OLDEST
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
+
+
+def _name_or_none(value: str | None) -> str | None:
+    return normalise_name(value) if value is not None else None
+
+
+def _directed(other: NodeId, own: _Own, other_is_upstream: bool, kind: EdgeKind) -> Edge:
     if other_is_upstream:
-        return Edge(upstream=other, downstream=activity_id, kind=kind, declared_by=activity_id)
-    return Edge(upstream=activity_id, downstream=other, kind=kind, declared_by=activity_id)
+        return Edge(upstream=other, downstream=own.key, kind=kind, declared_by=own.key)
+    return Edge(upstream=own.key, downstream=other, kind=kind, declared_by=own.key)
 
 
-# --- L1/L2: related-activity --------------------------------------------------------------------------------------
+def _other_activity(value: object, own: _Own) -> str | None:
+    """The spelling of an activity identifier that names another activity than the declaring one, else None."""
+    spelling = normalise_id(value)
+    return spelling if spelling is not None and node_key(spelling) != own.key else None
 
 
-def _related_edges(relations: Iterable[dict[str, Any]], activity_id: str) -> Iterator[Edge]:
-    """Type 1 (parent) and 2 (child) only. Siblings (3) and types 4/5 are ignored in the baseline (spec §5.2)."""
+# Related activities
+
+
+def _related_links(relations: Iterable[dict[str, Any]], own: _Own) -> Iterator[tuple[Edge, str]]:
+    """Parent and child links (types 1 and 2): a parent funds its children.
+
+    Siblings (type 3) share a parent but don't fund each other. Co-funded (4) and third-party (5) relations are left out
+    until it is decided whether they mean funding.
+    """
     for relation in relations:
-        ref = normalise_id(relation.get("ref"))
-        if ref is None or ref == activity_id:
-            continue
+        other = _other_activity(relation.get("ref"), own)
         rel_type = _as_int(relation.get("type"))
-        if rel_type == _RELATED_PARENT:
-            yield _directed(ref, activity_id, True, "hierarchy")
-        elif rel_type == _RELATED_CHILD:
-            yield _directed(ref, activity_id, False, "hierarchy")
+        if other is not None and rel_type in (_RELATED_PARENT, _RELATED_CHILD):
+            yield _directed(node_key(other), own, rel_type == _RELATED_PARENT, "hierarchy"), other
 
 
-# --- L3/L4 and O1/O2: transactions --------------------------------------------------------------------------------
+# Transactions
 
 
 @dataclass(frozen=True)
@@ -288,68 +369,110 @@ _PROVIDER = _Party("provider-org", "provider-activity-id", upstream=True)
 _RECEIVER = _Party("receiver-org", "receiver-activity-id", upstream=False)
 
 
+def _transaction_type(transaction: Mapping[str, Any]) -> int | None:
+    value = transaction.get("transaction-type")
+    return _as_int(value.get("code")) if isinstance(value, dict) else _as_int(value)
+
+
 def _parties(transactions: Iterable[dict[str, Any]]) -> Iterator[tuple[_Party, dict[str, Any]]]:
-    """Each transaction's provider-org then receiver-org, in document order, where they are JSON objects."""
+    """Each transaction's provider-org then receiver-org, in document order, where they are JSON objects.
+
+    The provider always funds the declaring activity, whatever the transaction type. The receiver only counts on an
+    outgoing transaction; on an incoming one, the receiver is the declaring activity itself.
+    """
     for transaction in transactions:
+        outgoing = _transaction_type(transaction) in OUTGOING_TRANSACTION_TYPES
         for party in (_PROVIDER, _RECEIVER):
             org = transaction.get(party.key)
-            if isinstance(org, dict):
+            if isinstance(org, dict) and (party.upstream or outgoing):
                 yield party, org
 
 
-def _transaction_edges(transactions: Iterable[dict[str, Any]], activity_id: str) -> Iterator[Edge]:
-    """L3/L4, whatever the transaction type."""
+def _transaction_links(transactions: Iterable[dict[str, Any]], own: _Own) -> Iterator[tuple[Edge, str]]:
+    """Links to the provider and receiver activities named in transactions."""
     for party, org in _parties(transactions):
-        other = normalise_id(org.get(party.activity_key))
-        if other is not None and other != activity_id:
-            yield _directed(other, activity_id, party.upstream, "transaction")
+        other = _other_activity(org.get(party.activity_key), own)
+        if other is not None:
+            yield _directed(node_key(other), own, party.upstream, "transaction"), other
 
 
-def _org_mentions(
-    transactions: Iterable[dict[str, Any]], activity_id: str, reporting_org_ref: str | None
-) -> Iterator[tuple[Edge, str, str | None]]:
-    """O1/O2: (edge, ref, narrative) for each party with a ref, no activity ID, and not the reporting org itself."""
+def _transaction_org_links(transactions: Iterable[dict[str, Any]], own: _Own) -> Iterator[tuple[Edge, Organisation]]:
+    """Links to transaction parties that name an organisation but no activity, so the chain ends there.
+
+    The reporting organisation itself is skipped: it is the declaring activity, not a separate funder or recipient.
+    """
     for party, org in _parties(transactions):
-        if normalise_id(org.get(party.activity_key)) is not None:
-            continue
-        ref = normalise_id(org.get("ref"))
-        if ref is None or ref == reporting_org_ref:
-            continue
-        edge = _directed(org_node_id(ref), activity_id, party.upstream, "transaction")
-        yield edge, ref, _first_text(org.get("narrative"))
+        if normalise_id(org.get(party.activity_key)) is None:
+            yield from _org_link(org, own, party.upstream, "transaction")
 
 
-def _organisations(mentions: Iterable[tuple[Edge, str, str | None]]) -> frozenset[Organisation]:
-    """One organisation per ref, named by the first non-blank narrative in document order."""
-    names: dict[str, str | None] = {}
-    for _edge, ref, name in mentions:
-        if names.get(ref) is None:
-            names[ref] = name
-    return frozenset(Organisation(ref=ref, name=name) for ref, name in names.items())
+def _org_link(
+    element: Mapping[str, Any], own: _Own, upstream: bool, kind: EdgeKind
+) -> Iterator[tuple[Edge, Organisation]]:
+    """The organisation link for one provider-org, receiver-org or participating-org element, if it gives one."""
+    ref = normalise_id(element.get("ref"))
+    name = _first_text(element.get("narrative"))
+    if own.is_reporting_org(ref, name):
+        return
+    if ref is not None:
+        node_id = org_node_id(ref)
+    elif name is not None:
+        node_id = org_name_node_id(name)
+    else:
+        return
+    yield _directed(node_id, own, upstream, kind), Organisation(node_id=node_id, ref=ref, name=name)
 
 
-# --- L5/L6/L7: participating-org ----------------------------------------------------------------------------------
+def _organisations(organisations: Iterable[Organisation]) -> frozenset[Organisation]:
+    """One organisation per node: the first spelling of its ref, and the first non-blank name, in document order."""
+    merged: dict[NodeId, Organisation] = {}
+    for organisation in organisations:
+        known = merged.get(organisation.node_id)
+        if known is None:
+            merged[organisation.node_id] = organisation
+        elif known.name is None and organisation.name is not None:
+            merged[organisation.node_id] = replace(known, name=organisation.name)
+    return frozenset(merged.values())
 
 
-def _participating_activities(orgs: Iterable[dict[str, Any]], activity_id: str) -> Iterator[tuple[int | None, str]]:
-    """(role, activity-id) for each participating-org naming an activity other than this one."""
+# Participating organisations
+
+
+def _participating_activities(
+    orgs: Iterable[dict[str, Any]], own: _Own
+) -> Iterator[tuple[int | None, str, dict[str, Any]]]:
+    """(role, activity-id spelling, element) for each participating-org naming an activity other than this one."""
     for org in orgs:
-        other = normalise_id(org.get("activity-id"))
-        if other is not None and other != activity_id:
-            yield _as_int(org.get("role")), other
+        other = _other_activity(org.get("activity-id"), own)
+        if other is not None:
+            yield _as_int(org.get("role")), other, org
 
 
-def _participating_edges(orgs: Iterable[dict[str, Any]], activity_id: str) -> Iterator[Edge]:
-    for role, other in _participating_activities(orgs, activity_id):
+def _participating_links(orgs: Iterable[dict[str, Any]], own: _Own) -> Iterator[tuple[Edge, str]]:
+    """Funders (role 1) above, implementers (role 4) below.
+
+    An implementer entry for the reporting organisation itself is skipped: it says that the publisher implements this
+    activity, not that this activity funds the activity it points to.
+    """
+    for role, other, org in _participating_activities(orgs, own):
         if role == _ROLE_FUNDING:
-            yield _directed(other, activity_id, True, "participating-org")
-        elif role == _ROLE_IMPLEMENTING:
-            yield _directed(other, activity_id, False, "participating-org")
+            yield _directed(node_key(other), own, True, "participating-org"), other
+        elif role == _ROLE_IMPLEMENTING and not own.is_reporting_org(
+            normalise_id(org.get("ref")), _first_text(org.get("narrative"))
+        ):
+            yield _directed(node_key(other), own, False, "participating-org"), other
 
 
-def _associations(orgs: Iterable[dict[str, Any]], activity_id: str) -> Iterator[Association]:
-    for role, other in _participating_activities(orgs, activity_id):
+def _participating_org_links(orgs: Iterable[dict[str, Any]], own: _Own) -> Iterator[tuple[Edge, Organisation]]:
+    """Links to funders (role 1) named as an organisation without an activity."""
+    for org in orgs:
+        if _as_int(org.get("role")) == _ROLE_FUNDING and normalise_id(org.get("activity-id")) is None:
+            yield from _org_link(org, own, True, "participating-org")
+
+
+def _associations(orgs: Iterable[dict[str, Any]], own: _Own) -> Iterator[tuple[Association, str]]:
+    for role, other, _org in _participating_activities(orgs, own):
         association_role = _ASSOCIATION_ROLES.get(role) if role is not None else None
         if association_role is not None:
-            first, second = sorted((activity_id, other))
-            yield Association(activities=(first, second), role=association_role, declared_by=activity_id)
+            first, second = sorted((own.key, node_key(other)))
+            yield Association(activities=(first, second), role=association_role, declared_by=own.key), other

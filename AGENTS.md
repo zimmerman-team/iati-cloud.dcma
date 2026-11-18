@@ -16,6 +16,13 @@ uv run pytest tests/test_main.py::test_name  # Single test
 - **Type checker is `ty`**: Not mypy. Run via `make typecheck` or `uv run ty check app`
 - **Coverage 100%**: Tests fail if coverage drops below 100% (`app/docs.py` is excluded)
 
+## Delivery chain code
+
+- `app/blueprint.py` must not import `app.config` (circular import). Read dependencies from `current_app.extensions`
+- Tests never hit the network: use `FakeLinkSource` / `make_services` from `tests/conftest.py`
+- Live smoke tests: `uv run pytest -m live --no-cov`
+- `SECRET_KEY` is required: the app does not start without it (tests set one in `tests/__init__.py`)
+
 ## Auth Exempt Paths
 
 To exempt a route from API key auth, add it to `AUTH_EXEMPT_PATHS` in `app/blueprint.py` (relative to blueprint, e.g., `"/health-check"`). Do not modify `app/main.py`.

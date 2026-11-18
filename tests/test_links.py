@@ -1,4 +1,4 @@
-"""Tests for app.iati_cloud_dcma.links: link extraction from one Solr activity document (spec §5.2, §5.3, §5.5)."""
+"""Tests for app.iati_cloud_dcma.links: link extraction from one Solr activity document."""
 
 import json
 import logging
@@ -13,12 +13,8 @@ from app.iati_cloud_dcma.links import (
     Links,
     Organisation,
     extract,
-    is_org_node,
-    is_structured_ref,
-    normalise_id,
-    org_node_id,
-    org_ref_of,
 )
+from app.iati_cloud_dcma.nodes import is_org_node, node_key, org_name_node_id, org_node_id
 
 X = "XX-TEST-1"
 REPORTER = "XX-ORG"
@@ -42,8 +38,26 @@ def _doc(*, related=(), transactions=(), participating=(), **fields) -> dict:
     return doc
 
 
+def _key(node: str) -> str:
+    """The node key of an activity identifier, or of an organisation written as "org:<ref>" / "org-name:<name>"."""
+    return node.casefold() if node.startswith(("org:", "org-name:")) else node_key(node)
+
+
 def _edge(upstream, downstream, kind, declared_by=X) -> Edge:
-    return Edge(upstream=upstream, downstream=downstream, kind=kind, declared_by=declared_by)
+    """An edge written with the spellings of the test data; the extractor works in node keys."""
+    return Edge(upstream=_key(upstream), downstream=_key(downstream), kind=kind, declared_by=_key(declared_by))
+
+
+def _org(ref, name=None) -> Organisation:
+    return Organisation(node_id=org_node_id(ref), ref=ref, name=name)
+
+
+def _association(first, second, role, declared_by=X) -> Association:
+    return Association(activities=(node_key(first), node_key(second)), role=role, declared_by=node_key(declared_by))
+
+
+def _named_org(name) -> Organisation:
+    return Organisation(node_id=org_name_node_id(name), ref=None, name=name)
 
 
 def _tx(provider=None, receiver=None, code=3) -> dict:
@@ -53,33 +67,6 @@ def _tx(provider=None, receiver=None, code=3) -> dict:
     if receiver is not None:
         tx["receiver-org"] = receiver
     return tx
-
-
-# --- normalise_id -----------------------------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        ("GB-GOV-1-300978-405", "GB-GOV-1-300978-405"),
-        (" GB-GOV-1-300978-405", "GB-GOV-1-300978-405"),
-        ("\n  XM-OCHA-CERF \t", "XM-OCHA-CERF"),
-        (41119, "41119"),
-        ("", None),
-        ("   ", None),
-        (None, None),
-        (True, None),
-        (1.5, None),
-        (["GB-1"], None),
-        ({"ref": "GB-1"}, None),
-    ],
-)
-def test_normalise_id(value, expected):
-    assert normalise_id(value) == expected
-
-
-def test_org_node_id_is_namespaced():
-    assert org_node_id("XM-OCHA-CERF") == "org:XM-OCHA-CERF"
 
 
 # --- L1/L2: related-activity --------------------------------------------------------------------------------------
@@ -125,13 +112,49 @@ def test_l4_receiver_activity_gives_edge_to_receiver():
     assert links.organisations == frozenset()
 
 
-@pytest.mark.parametrize("code", [1, 2, 3, 4, 11, "3", None])
-def test_transaction_links_apply_to_every_transaction_type(code):
-    tx = _tx(provider={"provider-activity-id": "P-1"}, receiver={"receiver-activity-id": "R-1"}, code=code)
+def _typed_tx(code, **parties) -> dict:
+    tx = _tx(code=code, **parties)
     if code is None:
         del tx["transaction-type"]
-    links = extract(_doc(transactions=[tx]))
-    assert links.edges == {_edge("P-1", X, "transaction"), _edge(X, "R-1", "transaction")}
+    return tx
+
+
+ALL_TYPES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, "3", " 1 ", None, "x"]
+OUTGOING_TYPES = [2, 3, 4, 12, "3", " 4 "]
+OTHER_TYPES = [1, 5, 6, 7, 8, 9, 10, 11, 13, None, "x", {"code": 3}]
+
+
+@pytest.mark.parametrize("code", ALL_TYPES)
+def test_l3_applies_to_every_transaction_type(code):
+    links = extract(_doc(transactions=[_typed_tx(code, provider={"provider-activity-id": "P-1"})]))
+    assert links.edges == {_edge("P-1", X, "transaction")}
+
+
+@pytest.mark.parametrize("code", OUTGOING_TYPES)
+def test_l4_applies_to_outgoing_transaction_types(code):
+    links = extract(_doc(transactions=[_typed_tx(code, receiver={"receiver-activity-id": "R-1"})]))
+    assert links.edges == {_edge(X, "R-1", "transaction")}
+
+
+@pytest.mark.parametrize("code", OTHER_TYPES)
+def test_l4_and_o1_ignore_receivers_of_other_transaction_types(code):
+    # On an incoming transaction the receiver is the activity itself or, often, its own parent (spec C1).
+    transactions = [
+        _typed_tx(code, receiver={"receiver-activity-id": "R-1"}),
+        _typed_tx(code, receiver={"ref": "R-ORG", "narrative": "Receiver"}),
+    ]
+    assert extract(_doc(transactions=transactions)) == Links()
+
+
+def test_transaction_type_given_as_plain_value():
+    tx = {"transaction-type": "3", "receiver-org": {"receiver-activity-id": "R-1"}}
+    assert extract(_doc(transactions=[tx])).edges == {_edge(X, "R-1", "transaction")}
+
+
+@pytest.mark.parametrize("code", ALL_TYPES)
+def test_o2_applies_to_every_transaction_type(code):
+    links = extract(_doc(transactions=[_typed_tx(code, provider={"ref": "P-ORG"})]))
+    assert links.edges == {_edge("org:P-ORG", X, "transaction")}
 
 
 def test_transaction_activity_id_that_is_an_org_ref_is_kept_as_activity():
@@ -165,8 +188,8 @@ def test_l7_accountable_or_extending_org_gives_sorted_association(role):
     )
     assert links.edges == frozenset()
     assert links.associations == {
-        Association(activities=("AA-FIRST", X), role=role, declared_by=X),
-        Association(activities=(X, "ZZ"), role=role, declared_by=X),
+        _association("AA-FIRST", X, role),
+        _association(X, "ZZ", role),
     }
 
 
@@ -176,11 +199,78 @@ def test_other_participating_org_roles_are_ignored(role):
     assert extract(_doc(participating=[org])) == Links()
 
 
-@pytest.mark.parametrize("role", [1, 2, 3, 4])
-def test_participating_org_without_activity_id_is_ignored(role):
-    # Organisation nodes from participating-org refs are a future extension (spec §5.2, §9).
+@pytest.mark.parametrize("role", [2, 3, 4])
+def test_other_roles_without_activity_id_are_ignored(role):
+    # Role-4 organisations as downstream nodes are an extension (spec §8).
     participating = [{"ref": "GB-CHC-1", "role": role}, {"ref": "", "role": role, "activity-id": ""}]
     assert extract(_doc(participating=participating)) == Links()
+
+
+def test_l6_ignores_the_reporting_org_as_implementer():
+    # The publisher lists itself as implementer with a variant of its own activity ID, or its parent (spec C2).
+    participating = [
+        {"ref": REPORTER, "role": 4, "activity-id": "XX-TEST-PARENT"},
+        {"ref": REPORTER.lower(), "role": 4, "activity-id": "XX-TEST-1-OLD"},
+    ]
+    assert extract(_doc(participating=participating)) == Links()
+
+
+def test_l6_without_ref_compares_the_name_with_the_reporting_org():
+    participating = [
+        {"role": 4, "activity-id": "I-1", "narrative": "  the   REPORTER "},
+        {"role": 4, "activity-id": "I-2", "narrative": "Someone else"},
+        {"role": 4, "activity-id": "I-3"},
+    ]
+    links = extract(_doc(participating=participating, **{"reporting-org.narrative": ["The Reporter"]}))
+    assert links.edges == {_edge(X, "I-2", "participating-org"), _edge(X, "I-3", "participating-org")}
+
+
+def test_l5_still_applies_to_the_reporting_org_as_funder():
+    # A role-1 entry for the own organisation mostly names the activity's own parent: the right direction.
+    links = extract(_doc(participating=[{"ref": REPORTER, "role": 1, "activity-id": "XX-TEST-PARENT"}]))
+    assert links.edges == {_edge("XX-TEST-PARENT", X, "participating-org")}
+
+
+# --- O3: funder named without an activity -----------------------------------------------------------------------
+
+
+def test_o3_funding_org_without_activity_gives_org_edge():
+    participating = [
+        {"ref": "GB-GOV-1", "role": 1, "narrative": "FCDO"},
+        {"ref": "SE-0", "role": "1", "activity-id": " "},
+    ]
+    links = extract(_doc(participating=participating))
+    assert links.edges == {_edge("org:GB-GOV-1", X, "participating-org"), _edge("org:SE-0", X, "participating-org")}
+    assert links.organisations == {_org("GB-GOV-1", "FCDO"), _org("SE-0")}
+
+
+def test_o3_does_not_apply_when_the_funder_names_an_activity():
+    links = extract(_doc(participating=[{"ref": "GB-GOV-1", "role": 1, "activity-id": "F-1"}]))
+    assert links.edges == {_edge("F-1", X, "participating-org")}
+    assert links.organisations == frozenset()
+
+
+def test_o3_does_not_apply_when_the_activity_id_is_the_activity_itself():
+    assert extract(_doc(participating=[{"ref": "GB-GOV-1", "role": 1, "activity-id": X}])) == Links()
+
+
+def test_o3_skips_the_reporting_org_and_takes_name_only_funders():
+    participating = [{"ref": REPORTER, "role": 1}, {"role": 1, "narrative": "Some  Donor"}, {"role": 1}]
+    links = extract(_doc(participating=participating))
+    assert links.edges == {_edge("org-name:some donor", X, "participating-org")}
+    assert links.organisations == {_named_org("Some  Donor")}
+
+
+def test_funder_in_transaction_and_participating_org_is_one_organisation_with_two_kinds():
+    links = extract(
+        _doc(
+            participating=[{"ref": "GB-GOV-1", "role": 1}],
+            transactions=[_tx(provider={"ref": "gb-gov-1", "narrative": "FCDO"}, code=1)],
+        )
+    )
+    assert links.edges == {_edge("org:GB-GOV-1", X, "participating-org"), _edge("org:GB-GOV-1", X, "transaction")}
+    # the first spelling in document order (transactions are read first), with the first name found
+    assert links.organisations == {Organisation(node_id="org:gb-gov-1", ref="gb-gov-1", name="FCDO")}
 
 
 # --- Self-references ----------------------------------------------------------------------------------------------
@@ -200,6 +290,36 @@ def test_self_references_are_ignored(fields):
     assert extract(_doc(**fields)) == Links()
 
 
+def test_self_reference_in_another_letter_case_is_ignored():
+    fields = {
+        "related": [{"ref": X.lower(), "type": 1}],
+        "transactions": [
+            _tx(provider={"provider-activity-id": X.lower()}, receiver={"receiver-activity-id": "xx-Test-1"})
+        ],
+        "participating": [{"role": 1, "activity-id": X.lower()}],
+    }
+    assert extract(_doc(**fields)) == Links()
+
+
+def test_spellings_of_one_identifier_give_one_edge_and_keep_their_labels():
+    links = extract(
+        _doc(transactions=[_tx(provider={"provider-activity-id": spelling}) for spelling in ("P-1", "p-1")])
+    )
+    assert links.edges == {_edge("P-1", X, "transaction")}
+    assert links.labels == {(_key("P-1"), "P-1"), (_key("P-1"), "p-1")}
+
+
+def test_labels_cover_edges_and_associations_but_not_organisations():
+    links = extract(
+        _doc(
+            related=[{"ref": "Parent-1", "type": 1}],
+            participating=[{"role": 2, "activity-id": "Assoc-1"}],
+            transactions=[_tx(receiver={"ref": "R-ORG"})],
+        )
+    )
+    assert links.labels == {(_key("Parent-1"), "Parent-1"), (_key("Assoc-1"), "Assoc-1")}
+
+
 def test_self_referencing_activity_id_still_blocks_org_link():
     # The transaction names an activity (X itself), so O1/O2 do not apply even though the ref is another org.
     tx = _tx(
@@ -215,13 +335,13 @@ def test_self_referencing_activity_id_still_blocks_org_link():
 def test_o1_receiver_org_without_activity_gives_org_edge():
     links = extract(_doc(transactions=[_tx(receiver={"ref": "US-EIN-1", "narrative": "AAH USA"})]))
     assert links.edges == {_edge(X, "org:US-EIN-1", "transaction")}
-    assert links.organisations == {Organisation(ref="US-EIN-1", name="AAH USA")}
+    assert links.organisations == {_org("US-EIN-1", "AAH USA")}
 
 
 def test_o2_provider_org_without_activity_gives_org_edge():
     links = extract(_doc(transactions=[_tx(provider={"ref": "GB-GOV-1", "narrative": "FCDO"}, code=1)]))
     assert links.edges == {_edge("org:GB-GOV-1", X, "transaction")}
-    assert links.organisations == {Organisation(ref="GB-GOV-1", name="FCDO")}
+    assert links.organisations == {_org("GB-GOV-1", "FCDO")}
 
 
 @pytest.mark.parametrize("empty_activity_id", ["", "   ", None])
@@ -240,9 +360,42 @@ def test_reporting_org_is_never_an_org_node(ref):
     assert extract(_doc(transactions=[tx], **{"reporting-org.ref": f"{REPORTER}\n"})) == Links()
 
 
-@pytest.mark.parametrize("org", [{"narrative": "Name only"}, {"ref": "", "narrative": "Name"}, {"ref": None}, {}])
-def test_org_without_ref_is_skipped(org):
+def test_reporting_org_in_another_letter_case_is_never_an_org_node():
+    tx = _tx(provider={"ref": REPORTER.lower()}, receiver={"ref": REPORTER.lower()})
+    assert extract(_doc(transactions=[tx])) == Links()
+
+
+@pytest.mark.parametrize("org", [{"ref": None}, {}, {"ref": " ", "narrative": "  "}, {"narrative": []}])
+def test_org_without_ref_or_name_is_skipped(org):
     assert extract(_doc(transactions=[_tx(provider=org, receiver=org)])) == Links()
+
+
+@pytest.mark.parametrize(
+    "org", [{"narrative": " Norwegian  REFUGEE Council "}, {"ref": "", "narrative": "Norwegian Refugee Council"}]
+)
+def test_org_with_only_a_name_gives_a_name_only_node(org):
+    links = extract(_doc(transactions=[_tx(receiver=org)]))
+    assert links.edges == {_edge(X, "org-name:norwegian refugee council", "transaction")}
+    (organisation,) = links.organisations
+    assert (organisation.ref, organisation.identification) == (None, "name-only")
+    assert organisation.name == " ".join(org["narrative"].split()) or organisation.name == org["narrative"].strip()
+
+
+def test_name_only_org_equal_to_the_reporting_org_name_is_skipped():
+    tx = _tx(provider={"narrative": "the  reporter"}, receiver={"narrative": "The Reporter"})
+    assert extract(_doc(transactions=[tx], **{"reporting-org.narrative": "The Reporter"})) == Links()
+
+
+def test_name_only_org_is_kept_when_the_reporting_org_has_no_name():
+    links = extract(_doc(transactions=[_tx(receiver={"narrative": "The Reporter"})]))
+    assert links.organisations == {_named_org("The Reporter")}
+
+
+def test_name_only_node_is_separate_from_a_ref_node_with_the_same_name():
+    transactions = [_tx(receiver={"ref": "22000", "narrative": "NRC"}), _tx(receiver={"narrative": "NRC"})]
+    links = extract(_doc(transactions=transactions))
+    assert links.edges == {_edge(X, "org:22000", "transaction"), _edge(X, "org-name:nrc", "transaction")}
+    assert links.organisations == {_org("22000", "NRC"), _named_org("NRC")}
 
 
 def test_org_link_without_reporting_org_on_document():
@@ -258,17 +411,17 @@ def test_org_name_is_first_non_empty_narrative():
         _tx(receiver={"ref": "R-ORG", "narrative": "\n  First Name \n"}),
         _tx(receiver={"ref": "R-ORG", "narrative": "Second Name"}),
     ]
-    assert extract(_doc(transactions=transactions)).organisations == {Organisation(ref="R-ORG", name="First Name")}
+    assert extract(_doc(transactions=transactions)).organisations == {_org("R-ORG", "First Name")}
 
 
 def test_org_name_from_list_narrative():
     tx = _tx(receiver={"ref": "R-ORG", "narrative": ["", " Nom ", "Name"]})
-    assert extract(_doc(transactions=[tx])).organisations == {Organisation(ref="R-ORG", name="Nom")}
+    assert extract(_doc(transactions=[tx])).organisations == {_org("R-ORG", "Nom")}
 
 
 def test_org_name_is_none_when_no_narrative():
     tx = _tx(receiver={"ref": "R-ORG", "narrative": None})
-    assert extract(_doc(transactions=[tx])).organisations == {Organisation(ref="R-ORG", name=None)}
+    assert extract(_doc(transactions=[tx])).organisations == {_org("R-ORG", None)}
 
 
 def test_org_name_only_from_transactions_that_create_the_org_link():
@@ -276,42 +429,41 @@ def test_org_name_only_from_transactions_that_create_the_org_link():
         _tx(receiver={"ref": "R-ORG", "receiver-activity-id": "R-1", "narrative": "Not this one"}),
         _tx(receiver={"ref": "R-ORG", "narrative": "This one"}),
     ]
-    assert extract(_doc(transactions=transactions)).organisations == {Organisation(ref="R-ORG", name="This one")}
+    assert extract(_doc(transactions=transactions)).organisations == {_org("R-ORG", "This one")}
 
 
 def test_org_seen_as_provider_and_receiver_is_one_organisation():
     transactions = [_tx(provider={"ref": "BOTH", "narrative": "Both"}), _tx(receiver={"ref": "BOTH", "narrative": "B"})]
     links = extract(_doc(transactions=transactions))
     assert links.edges == {_edge("org:BOTH", X, "transaction"), _edge(X, "org:BOTH", "transaction")}
-    assert links.organisations == {Organisation(ref="BOTH", name="Both")}
+    assert links.organisations == {_org("BOTH", "Both")}
 
 
 def test_numeric_org_ref_is_coerced():
     links = extract(_doc(transactions=[_tx(receiver={"ref": 41119, "narrative": "UNFPA"})]))
     assert links.edges == {_edge(X, "org:41119", "transaction")}
-    assert links.organisations == {Organisation(ref="41119", name="UNFPA")}
+    assert links.organisations == {_org("41119", "UNFPA")}
 
 
 @pytest.mark.parametrize("ref", ["GB-CHC-1047501", "US-EIN-13-3327220", "41119", "XM-OCHA-CBPF-AFG-22/3481"])
-def test_identifier_like_ref_is_structured(ref):
-    assert Organisation(ref=ref, name=None).structured_ref is True
+def test_identifier_like_ref_is_an_identifier(ref):
+    assert _org(ref).identification == "identifier"
 
 
 @pytest.mark.parametrize("ref", ["2025 Q7 Expenditure (KAALO)", "BRAC UK", "IATI Id GB-GOV-1", "NL-CCI-1 -GPAF"])
-def test_ref_with_internal_whitespace_is_not_structured(ref):
-    assert Organisation(ref=ref, name=None).structured_ref is False
+def test_ref_with_internal_whitespace_is_free_text(ref):
+    assert _org(ref).identification == "free-text"
 
 
-def test_unstructured_ref_still_gives_org_node():
-    # Decision 2026-11-06: follow spec §5.3 literally and flag the node; filtering happens at the API level.
+def test_free_text_ref_still_gives_org_node():
     links = extract(_doc(transactions=[_tx(receiver={"ref": "  BRAC UK "})]))
     assert links.edges == {_edge(X, "org:BRAC UK", "transaction")}
-    assert links.organisations == {Organisation(ref="BRAC UK", name=None)}
-    assert next(iter(links.organisations)).structured_ref is False
+    assert links.organisations == {_org("BRAC UK")}
 
 
-def test_organisation_node_id():
-    assert Organisation(ref="US-EIN-1", name=None).node_id == "org:US-EIN-1"
+def test_organisation_node_ids():
+    assert _org("US-EIN-1").node_id == "org:us-ein-1"
+    assert _named_org(" Some\n Org ").node_id == "org-name:some org"
 
 
 # --- Merging and duplicates ---------------------------------------------------------------------------------------
@@ -340,14 +492,14 @@ def test_same_pair_from_different_evidence_keeps_one_edge_per_kind():
 
 def test_duplicate_associations_collapse():
     participating = [{"role": 3, "activity-id": "A-1"}, {"role": "3", "activity-id": " A-1"}]
-    assert extract(_doc(participating=participating)).associations == {Association(("A-1", X), 3, X)}
+    assert extract(_doc(participating=participating)).associations == {_association("A-1", X, 3)}
 
 
 def test_same_pair_with_both_roles_gives_two_associations():
     participating = [{"role": 2, "activity-id": "A-1"}, {"role": 3, "activity-id": "A-1"}]
     assert extract(_doc(participating=participating)).associations == {
-        Association(("A-1", X), 2, X),
-        Association(("A-1", X), 3, X),
+        _association("A-1", X, 2),
+        _association("A-1", X, 3),
     }
 
 
@@ -367,7 +519,7 @@ def test_malformed_json_value_is_skipped_and_logged(caplog, field_kwarg, bad_val
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         links = extract(_doc(**{field_kwarg: [bad_value, good]}))
     assert len(links.edges) == 1
-    assert next(iter(links.edges)).upstream == "P-1"
+    assert next(iter(links.edges)).upstream == _key("P-1")
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING and r.name == LOGGER]
     assert len(warnings) == 1
     assert X in warnings[0].getMessage()
@@ -424,6 +576,8 @@ def test_activity_doc_from_solr_reads_metadata(activity_fixture):
     assert doc.activity_status == "4"
     links = extract(raw)
     assert (doc.edges, doc.associations, doc.organisations) == (links.edges, links.associations, links.organisations)
+    assert doc.labels == links.labels
+    assert doc.key == "act:gb-chc-1047501-23soelnf"
 
 
 def test_activity_doc_with_only_identifier():
@@ -438,6 +592,9 @@ def test_activity_doc_with_only_identifier():
         edges=frozenset(),
         associations=frozenset(),
         organisations=frozenset(),
+        labels=frozenset(),
+        doc_id=None,
+        last_updated=None,
     )
 
 
@@ -495,7 +652,7 @@ def test_fixture_action_against_hunger(activity_fixture):
         _edge(PROJECT_408, AAH, "transaction", AAH),
         _edge(AAH, "org:US-EIN-13-3327220", "transaction", AAH),
     }
-    assert links.organisations == {Organisation("US-EIN-13-3327220", "ACTION AGAINST HUNGER USA")}
+    assert links.organisations == {_org("US-EIN-13-3327220", "ACTION AGAINST HUNGER USA")}
     assert links.associations == frozenset()  # its role-2 activity-id is itself
 
 
@@ -505,7 +662,7 @@ def test_fixture_fcdo_project_ignores_siblings(activity_fixture):
         _edge(PROGRAMME, PROJECT_408, "hierarchy", PROJECT_408),
         _edge(PROJECT_408, "org:GB-CHC-1047501", "transaction", PROJECT_408),
     }
-    assert links.organisations == {Organisation("GB-CHC-1047501", "Action Against Hunger (UK)")}
+    assert links.organisations == {_org("GB-CHC-1047501", "Action Against Hunger (UK)")}
 
 
 def test_fixture_fcdo_programme_lists_its_25_children(activity_fixture):
@@ -523,33 +680,44 @@ def test_fixture_trocaire_has_role_3_association(activity_fixture):
         _edge(PROJECT_408, TROCAIRE, "transaction", TROCAIRE),
         _edge(PROJECT_408, TROCAIRE, "participating-org", TROCAIRE),
     }
-    assert links.associations == {Association(("GB-CHC-1047501-24SOELN2F", TROCAIRE), 3, TROCAIRE)}
+    assert links.associations == {_association("GB-CHC-1047501-24SOELN2F", TROCAIRE, 3, TROCAIRE)}
     assert links.organisations == frozenset()
 
 
 def test_fixture_norwegian_refugee_council_trims_and_flags(activity_fixture):
     links = extract(activity_fixture(NRC))
     partners = ["GB-CHC-1065972", "GB-COH-213890", "GB-CHC-1047501", "GB-CHC-1092236"]
+    notes = [
+        "2024 Q5 Expenditure (GREDO)",
+        "2024 Q5 Expenditure (KAALO)",
+        "2025 Q6 Expenditure (GREDO)",
+        "2025 Q6 Expenditure (KAALO)",
+        "2025 Q7 Expenditure (GREDO)",
+        "2025 Q8 Expenditure (GREDO)",
+        NRC,  # its own activity ID typed as a receiver name
+    ]
     assert links.edges == {
         # " GB-GOV-1-300978-405" (leading space) and "GB-GOV-1-300978-405" collapse into one edge
         _edge(PROJECT_405, NRC, "transaction", NRC),
         _edge(PROJECT_405, NRC, "participating-org", NRC),
         # its own organisation ref, published as a provider-activity-id: kept as an (unpublished) activity
         _edge("NO-BRC-977538319", NRC, "transaction", NRC),
-        # partner organisation refs published as receiver-activity-ids: also kept as activities
-        *(_edge(NRC, partner, "transaction", NRC) for partner in partners),
+        # The partner refs it publishes as receiver-activity-ids sit on incoming (type 1) transactions, so they give no
+        # activity edges (spec C1). Its expenditures name the same partners by ref only: organisation links.
         *(_edge(NRC, f"org:{partner}", "transaction", NRC) for partner in partners),
         _edge(NRC, "org:2025 Q7 Expenditure (KAALO)", "transaction", NRC),
+        *(_edge(NRC, f"org-name:{note}", "transaction", NRC) for note in notes),
     }
     assert links.organisations == {
-        Organisation("GB-CHC-1065972", "2025 Q8 Expenditure (IRC)"),
-        Organisation("GB-COH-213890", "2025 Q8 Expenditure (SCI)"),
-        Organisation("GB-CHC-1047501", "2025 Q8 Expenditure (ACF)"),
-        Organisation("GB-CHC-1092236", "2025 Q8 Expenditure (CWW)"),
-        Organisation("2025 Q7 Expenditure (KAALO)", "2025 Q7 Expenditure (KAALO)"),
+        _org("GB-CHC-1065972", "2025 Q8 Expenditure (IRC)"),
+        _org("GB-COH-213890", "2025 Q8 Expenditure (SCI)"),
+        _org("GB-CHC-1047501", "2025 Q8 Expenditure (ACF)"),
+        _org("GB-CHC-1092236", "2025 Q8 Expenditure (CWW)"),
+        _org("2025 Q7 Expenditure (KAALO)", "2025 Q7 Expenditure (KAALO)"),
+        *(_named_org(note) for note in notes),
     }
-    unstructured = {org.ref for org in links.organisations if not org.structured_ref}
-    assert unstructured == {"2025 Q7 Expenditure (KAALO)"}
+    free_text = {org.ref for org in links.organisations if org.identification == "free-text"}
+    assert free_text == {"2025 Q7 Expenditure (KAALO)"}
 
 
 def test_fixture_ocha_pooled_fund_with_slash_in_identifier(activity_fixture):
@@ -561,10 +729,31 @@ def test_fixture_ocha_pooled_fund_with_slash_in_identifier(activity_fixture):
         _edge(parent, CBPF, "hierarchy", CBPF),
         _edge(parent, CBPF, "transaction", CBPF),
         _edge(parent, CBPF, "participating-org", CBPF),
+        _edge(CBPF, "org-name:Norwegian Afghanistan Committee", "transaction", CBPF),
     }
-    # empty-string refs and activity IDs, and a receiver named only by narrative, give nothing
-    assert links.organisations == frozenset()
+    # empty-string refs and activity IDs give nothing; the receiver named only by narrative is a name-only node
+    assert links.organisations == {_named_org("Norwegian Afghanistan Committee")}
     assert links.associations == frozenset()
+
+
+def test_fixture_incoming_funds_naming_the_own_parent_as_receiver(activity_fixture):
+    # Its incoming-funds transactions (type 1) have the donor as provider and its own parent fund as
+    # receiver-activity-id. Read as "X funds R", the child would fund its parent (spec C1).
+    child, parent = "XM-OCHA-CBPF-ERF/VEN_CBPF/9552/14817/2021", "XM-OCHA-CBPF-VEN83-2021"
+    raw = activity_fixture(child)
+    incoming = [json.loads(value) for value in raw["json.transaction"]]
+    assert any(
+        tx["transaction-type"]["code"] in (1, "1") and tx["receiver-org"].get("receiver-activity-id") == parent
+        for tx in incoming
+        if "receiver-org" in tx
+    )
+    links = extract(raw)
+    assert _edge(child, parent, "transaction", child) not in links.edges
+    assert links.edges == {
+        _edge(parent, child, "hierarchy", child),
+        _edge("org:NO-BRC-971277882", child, "transaction", child),
+        _edge("org:NO-BRC-971277882", child, "participating-org", child),
+    }
 
 
 def test_fixture_cerf_org_ref_as_activity_id(activity_fixture):
@@ -573,7 +762,7 @@ def test_fixture_cerf_org_ref_as_activity_id(activity_fixture):
         _edge("XM-OCHA-CERF", CERF, "participating-org", CERF),
         _edge(CERF, "org:XM-DAC-47066", "transaction", CERF),
     }
-    assert links.organisations == {Organisation("XM-DAC-47066", "International Organization for Migration (IOM)")}
+    assert links.organisations == {_org("XM-DAC-47066", "International Organization for Migration (IOM)")}
 
 
 # --- ActivityDoc.linked_activity_ids ------------------------------------------------------------------------------
@@ -587,21 +776,100 @@ def test_linked_activity_ids_are_the_other_ends_of_edges_and_associations():
             transactions=[_tx(receiver={"ref": "R-ORG"}, provider={"ref": "P-ORG"})],
         )
     )
-    assert doc.linked_activity_ids == {"P-1", "C-1", "A-1", "ZZ-A-2"}
+    assert doc.linked_activity_ids == {_key(i) for i in ("P-1", "C-1", "A-1", "ZZ-A-2")}
 
 
 def test_linked_activity_ids_exclude_organisation_nodes(activity_fixture):
     doc = ActivityDoc.from_solr(activity_fixture(AAH))
-    assert doc.linked_activity_ids == {PROJECT_408}
+    assert doc.linked_activity_ids == {node_key(PROJECT_408)}
 
 
 def test_linked_activity_ids_of_document_without_links():
     assert ActivityDoc.from_solr({"iati-identifier": X}).linked_activity_ids == frozenset()
 
 
-def test_org_node_helpers():
-    assert is_org_node("org:GB-CHC-1") is True
-    assert is_org_node("GB-CHC-1") is False
-    assert org_ref_of("org:GB-CHC-1") == "GB-CHC-1"
-    assert is_structured_ref("GB-CHC-1") is True
-    assert is_structured_ref("BRAC UK") is False
+# --- ActivityDoc.merge: several copies of one identifier (spec §4.5) ------------------------------------------------
+
+
+def _copy(doc_id, updated, *, identifier=X, title=None, parent=None) -> ActivityDoc:
+    raw = _doc(related=[{"ref": parent, "type": 1}] if parent else [], id=doc_id)
+    raw["iati-identifier"] = identifier
+    if updated is not None:
+        raw["last-updated-datetime"] = updated
+    if title is not None:
+        raw["title.narrative"] = title
+    return ActivityDoc.from_solr(raw)
+
+
+def test_activity_doc_reads_document_id_and_update_time():
+    doc = _copy("uuid-1", "2015-09-23T11:07:28Z")
+    assert (doc.doc_id, doc.last_updated) == ("uuid-1", "2015-09-23T11:07:28Z")
+
+
+def test_merge_of_one_copy_is_that_copy():
+    doc = _copy("a", "2020-01-01T00:00:00Z", parent="P-1")
+    assert ActivityDoc.merge([doc]) is doc
+
+
+def test_merge_keeps_the_links_of_every_copy():
+    copies = [_copy("a", "2020-01-01T00:00:00Z", parent="P-1"), _copy("b", "2021-01-01T00:00:00Z", parent="P-2")]
+    merged = ActivityDoc.merge(copies)
+    assert merged.edges == {_edge("P-1", X, "hierarchy"), _edge("P-2", X, "hierarchy")}
+    assert merged.labels == {(_key("P-1"), "P-1"), (_key("P-2"), "P-2")}
+
+
+def test_merge_takes_metadata_and_spelling_from_the_copy_updated_last():
+    copies = [
+        _copy("a", "2020-01-01T00:00:00Z", title="Old"),
+        _copy("b", "2021-01-01T00:00:00Z", title="New", identifier="xx-Test-1"),
+        _copy("c", None, title="Undated"),
+    ]
+    for order in (copies, copies[::-1]):
+        merged = ActivityDoc.merge(order)
+        assert (merged.title, merged.iati_identifier, merged.doc_id) == ("New", "xx-Test-1", "b")
+
+
+def test_merge_breaks_ties_by_lowest_document_id():
+    copies = [_copy("b", "2020-01-01T00:00:00Z", title="B"), _copy("a", "2020-01-01T00:00:00Z", title="A")]
+    assert ActivityDoc.merge(copies).title == "A"
+    assert ActivityDoc.merge(copies[::-1]).title == "A"
+
+
+def test_merge_of_undated_copies_without_ids_is_deterministic():
+    copies = [
+        _copy(None, None, title="B", identifier="XX-TEST-1"),
+        _copy(None, None, title="A", identifier="xx-test-1"),
+    ]
+    assert ActivityDoc.merge(copies).title == ActivityDoc.merge(copies[::-1]).title
+
+
+def test_merge_compares_update_times_as_moments_not_as_text():
+    copies = [
+        _copy("a", "2024-01-01T01:00:00+02:00", title="Earlier"),  # 23:00 UTC the day before
+        _copy("b", "2024-01-01T00:00:00Z", title="Later"),
+        _copy("c", "not a date", title="Unreadable"),
+        _copy("d", "2023-12-31T23:30:00", title="No zone"),  # read as UTC
+    ]
+    assert ActivityDoc.merge(copies).title == "Later"
+    assert ActivityDoc.merge(copies[2:]).title == "No zone"
+
+
+# --- Node keys keep activities and organisations apart ------------------------------------------------------------
+
+
+@pytest.mark.parametrize("identifier", ["org:x", "org-name:x", "Org: see parent"])
+def test_activity_identifier_that_looks_like_an_organisation_node_is_still_an_activity(identifier):
+    links = extract(_doc(related=[{"ref": identifier, "type": 2}]))
+    (edge,) = links.edges
+    assert edge.downstream == node_key(identifier)
+    assert is_org_node(edge.downstream) is False
+    assert ActivityDoc.from_solr(_doc(related=[{"ref": identifier, "type": 2}])).linked_activity_ids == {
+        edge.downstream
+    }
+
+
+def test_reporting_org_without_a_ref_is_recognised_by_name():
+    doc = _doc(transactions=[_tx(receiver={"ref": "XX-OTHER-REF", "narrative": "The Reporter"})])
+    del doc["reporting-org.ref"]
+    doc["reporting-org.narrative"] = "the reporter"
+    assert extract(doc) == Links()

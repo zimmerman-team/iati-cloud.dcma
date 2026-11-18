@@ -1,40 +1,64 @@
-"""Where links come from: the LinkSource protocol and its IATI.cloud Solr implementation (spec §5.4, §5.5, §8).
+"""Where links come from: the LinkSource protocol and its implementation over the IATI.cloud Solr activity core.
 
-Traversal only talks to a LinkSource, so a future graph store means a new implementation, not a rewrite (plan D3).
+Traversal only talks to a LinkSource, so moving to another store (say, a precomputed edge index) means writing a new
+implementation, not changing the traversal.
 """
 
 import logging
+from collections import defaultdict
 from collections.abc import Collection, Iterable, Iterator
+from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import NoReturn, Protocol, runtime_checkable
+from http.client import RemoteDisconnected
+from types import TracebackType
+from typing import Literal, NoReturn, Protocol, Self, runtime_checkable
 from urllib.parse import urlsplit, urlunsplit
 
 import pysolr
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.exceptions import MaxRetryError, ProtocolError
+from urllib3.util.retry import Retry
 
 from app.iati_cloud_dcma.budget import UNLIMITED, Budget, BudgetExhausted
-from app.iati_cloud_dcma.links import FIELD_IDENTIFIER, SOLR_FIELDS, ActivityDoc, InvalidDocument, normalise_id
+from app.iati_cloud_dcma.links import (
+    FIELD_DOC_ID,
+    FIELD_IDENTIFIER,
+    SOLR_FIELDS,
+    ActivityDoc,
+    InvalidDocument,
+)
+from app.iati_cloud_dcma.nodes import NodeId, node_key, normalise_id
 
 logger = logging.getLogger(__name__)
 
-# Solr query fields. The underscore fields are exact-match copies; participating-org.activity-id is tokenised and has
-# no exact copy, so its matches are only candidates (spec §5.5). Kept in one place because IATI.cloud instances may
-# differ (plan §5, risks).
+# Solr query fields. The underscore fields are exact-match copies, and case-sensitive: an identifier is only found
+# under the spelling it was published with. participating-org.activity-id is tokenised and has no exact copy, so its
+# matches are only candidates and are checked against the parsed links. Kept in one place because IATI.cloud instances may differ.
 MENTION_QUERY_FIELDS: tuple[str, ...] = (
     "transaction_provider_org_provider_activity_id",
     "transaction_receiver_org_receiver_activity_id",
     "related_activity_ref",
     "participating-org.activity-id",
 )
-# A stable order makes start-based paging safe. cursorMark is not an option: it needs the uniqueKey as the sort.
-SORT = f"{FIELD_IDENTIFIER} asc"
+# A stable order makes start-based paging safe. Identifiers repeat (several documents can share one), so the document
+# id breaks ties. cursorMark is rejected by the reference instance.
+SORT = f"{FIELD_IDENTIFIER} asc,{FIELD_DOC_ID} asc"
+# Page size of a fetch by identifier. One identifier can have hundreds of documents; without a floor, a single such
+# seed would cost one query per copy.
+FETCH_MIN_ROWS = 100
 # Page size of a mention query: per identifier in the batch, with a floor. One activity can be cited by many others,
 # and many matches are false candidates (every FCDO project is cited by its ~24 siblings through related_activity_ref,
 # type 3), so small frontiers would otherwise page in tiny steps.
 MENTION_ROWS_PER_ID = 5
 MENTION_MIN_ROWS = 100
+# How often a Solr request is sent again after a connection-level failure (see ConnectionRetry).
+CONNECTION_RETRIES = 2
 
 _FL = ",".join(SOLR_FIELDS)
+# The time budget of the request whose Solr query is in flight. The pysolr client and its retry policy are shared by
+# all requests of a worker, so the budget reaches ConnectionRetry this way rather than as an argument.
+_query_budget: ContextVar[Budget] = ContextVar("solr_query_budget", default=UNLIMITED)
 
 
 class SourceError(Exception):
@@ -49,33 +73,45 @@ class SourceTimeout(SourceError):
     """A Solr query timed out."""
 
 
+StopReason = Literal["mention_limit", "time_budget"]
+
+
 @dataclass(frozen=True)
 class Mentions:
-    """The answer to a reverse lookup. `complete` is False when it stopped early (time budget or limit)."""
+    """The answer to a reverse lookup: one merged document per identifier, and why it stopped early, if it did."""
 
     docs: tuple[ActivityDoc, ...]
-    complete: bool = True
+    stopped_by: StopReason | None = None
+
+    @property
+    def complete(self) -> bool:
+        return self.stopped_by is None
 
 
 @runtime_checkable
 class LinkSource(Protocol):
     @property
     def query_count(self) -> int:
-        """Number of queries this source has sent, for stats.solr_queries."""
+        """Number of queries this source has sent, for stats.solr_queries. Connection retries are not counted."""
         ...
 
-    def fetch(self, ids: Collection[str], budget: Budget = UNLIMITED) -> dict[str, ActivityDoc]:
-        """The published documents among `ids`, by identifier. Unknown identifiers are absent.
+    def fetch(self, ids: Collection[str], budget: Budget = UNLIMITED) -> dict[NodeId, ActivityDoc]:
+        """The published activities among `ids`, by node key. Unknown identifiers are absent.
 
+        `ids` may be in any letter case. All documents that share an identifier are merged into one.
         Raises BudgetExhausted when the budget runs out first: a partial answer would make published activities look
         unpublished.
         """
         ...
 
     def mentioning(self, ids: Collection[str], budget: Budget = UNLIMITED, limit: int | None = None) -> Mentions:
-        """Every document whose own links name one of `ids` (spec §5.4).
+        """Every activity whose own links name one of `ids`: the reverse lookup.
 
-        Stops early, with complete=False, when the budget runs out or once `limit` documents are found and more remain.
+        Needed because many recipients declare their funding pointing up, and the funder never names them.
+
+                `ids` are spellings: pass every known spelling of an identifier, because some link fields only match exactly.
+                The documents returned hold the links of the matching copies only; fetch an activity to get all of them.
+                Stops early when the budget runs out, or once `limit` activities are found and more remain.
         """
         ...
 
@@ -89,8 +125,53 @@ def quote_id(identifier: str) -> str:
     return '"' + identifier.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+class ConnectionRetry(Retry):
+    """Sends a Solr request again only when it failed before any response arrived.
+
+    Retried: connection failures (refused, name resolution, connect timeout) and a disconnect before the first byte of
+    the response. The reference proxy (nginx) closes keep-alive connections after 75 s idle; a pooled connection
+    reused at that moment fails with RemoteDisconnected, and a new connection succeeds.
+    Not retried: read timeouts and HTTP error responses. They reach the caller as 504 and 502.
+    Retrying is safe because every Solr call is a search: a GET, or a POST for long queries, which changes nothing.
+    No retry starts once the request's time budget is spent; the failure is then raised as if retries had run out.
+    """
+
+    def _is_connection_error(self, err: Exception) -> bool:
+        # urllib3 counts every ProtocolError as a read error, read timeouts included. A disconnect before any response
+        # means the server sent nothing, so it is treated like a failed connect.
+        return super()._is_connection_error(err) or _is_disconnect_before_response(err)
+
+    def increment(
+        self,
+        method: str | None = None,
+        url: str | None = None,
+        response=None,
+        error: Exception | None = None,
+        _pool=None,
+        _stacktrace: TracebackType | None = None,
+    ) -> Self:
+        # urllib3 passes the pool it got as _pool, possibly None, and makes the same call with a type ignore.
+        if error is not None and self._is_connection_error(error) and _query_budget.get().expired():
+            raise MaxRetryError(_pool, url, error) from error  # ty: ignore[invalid-argument-type]
+        return super().increment(method, url, response, error, _pool, _stacktrace)
+
+
+def _is_disconnect_before_response(err: Exception) -> bool:
+    return isinstance(err, ProtocolError) and any(isinstance(arg, RemoteDisconnected) for arg in err.args)
+
+
+def create_solr_session(retries: int = CONNECTION_RETRIES) -> requests.Session:
+    """A requests session that retries connection-level failures (ConnectionRetry) and nothing else."""
+    policy = ConnectionRetry(total=retries, connect=retries, read=False, redirect=False, status=0, other=0)
+    session = requests.Session()
+    adapter = HTTPAdapter(max_retries=policy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+
 def create_solr_client(solr_url: str, timeout: int) -> pysolr.Solr:
-    """A pysolr client whose searches go to exactly `solr_url`.
+    """A pysolr client whose searches go to exactly `solr_url`, over a session from create_solr_session.
 
     SOLR_URL names the endpoint that answers select queries: the reference instance's proxy answers at
     https://fcdo.iati.cloud/search/activity/ and returns 404 for .../select/. pysolr always appends a handler to its
@@ -102,7 +183,7 @@ def create_solr_client(solr_url: str, timeout: int) -> pysolr.Solr:
         raise ValueError("SOLR_URL must include the path of the select endpoint, e.g. /search/activity/")
     base_path, _, handler = path.rpartition("/")
     base_url = urlunsplit((parts.scheme, parts.netloc, base_path, "", ""))
-    return pysolr.Solr(base_url, search_handler=handler, timeout=timeout)
+    return pysolr.Solr(base_url, search_handler=handler, timeout=timeout, session=create_solr_session())
 
 
 class SolrLinkSource:
@@ -120,28 +201,29 @@ class SolrLinkSource:
     def query_count(self) -> int:
         return self._query_count
 
-    def fetch(self, ids: Collection[str], budget: Budget = UNLIMITED) -> dict[str, ActivityDoc]:
-        docs: dict[str, ActivityDoc] = {}
+    def fetch(self, ids: Collection[str], budget: Budget = UNLIMITED) -> dict[NodeId, ActivityDoc]:
+        copies: dict[NodeId, list[ActivityDoc]] = defaultdict(list)
         for batch in self._batches(ids):
-            wanted = frozenset(batch)
+            wanted = frozenset(map(node_key, batch))
             query = f"{FIELD_IDENTIFIER}:({' OR '.join(map(quote_id, batch))})"
-            for page, _more in self._pages(query, len(batch), budget):
+            for page, _more in self._pages(query, max(FETCH_MIN_ROWS, len(batch)), budget):
                 for doc in page:
-                    if doc.iati_identifier in wanted and doc.iati_identifier not in docs:
-                        docs[doc.iati_identifier] = doc
-        return docs
+                    if doc.key in wanted:
+                        copies[doc.key].append(doc)
+        return _merged(copies)
 
     def mentioning(self, ids: Collection[str], budget: Budget = UNLIMITED, limit: int | None = None) -> Mentions:
-        found: dict[str, ActivityDoc] = {}
+        copies: dict[NodeId, list[ActivityDoc]] = defaultdict(list)
+        stopped_by: StopReason | None = None
         try:
             for batch in self._batches(ids):
-                if limit is not None and len(found) >= limit:
-                    return Mentions(docs=tuple(found.values()), complete=False)
-                if not self._collect_mentions(batch, budget, limit, found):
-                    return Mentions(docs=tuple(found.values()), complete=False)
+                at_limit = limit is not None and len(copies) >= limit
+                if at_limit or not self._collect_mentions(batch, budget, limit, copies):
+                    stopped_by = "mention_limit"
+                    break
         except BudgetExhausted:
-            return Mentions(docs=tuple(found.values()), complete=False)
-        return Mentions(docs=tuple(found.values()))
+            stopped_by = "time_budget"
+        return Mentions(docs=tuple(_merged(copies).values()), stopped_by=stopped_by)
 
     def ping(self) -> bool:
         try:
@@ -152,24 +234,25 @@ class SolrLinkSource:
         return True
 
     def _batches(self, ids: Collection[str]) -> Iterator[list[str]]:
+        """Batches of distinct, trimmed identifiers. Spellings that differ only in case stay separate."""
         unique = sorted({clean for clean in map(normalise_id, ids) if clean is not None})
         for start in range(0, len(unique), self._batch_size):
             yield unique[start : start + self._batch_size]
 
     def _collect_mentions(
-        self, batch: list[str], budget: Budget, limit: int | None, found: dict[str, ActivityDoc]
+        self, batch: list[str], budget: Budget, limit: int | None, copies: dict[NodeId, list[ActivityDoc]]
     ) -> bool:
-        """Add one batch's confirmed mentions to `found`. False when it stopped at the limit with pages left."""
-        wanted = frozenset(batch)
+        """Add one batch's confirmed mentions to `copies`. False when it stopped at the limit with pages left."""
+        wanted = frozenset(map(node_key, batch))
         values = " OR ".join(map(quote_id, batch))
         query = " OR ".join(f"{field}:({values})" for field in MENTION_QUERY_FIELDS)
         rows = max(MENTION_MIN_ROWS, len(batch) * MENTION_ROWS_PER_ID)
         for page, more in self._pages(query, rows, budget):
             for doc in page:
-                # Solr matches are candidates only: confirm an exact identifier (tokenised field, spec §5.5).
-                if doc.linked_activity_ids & wanted and doc.iati_identifier not in found:
-                    found[doc.iati_identifier] = doc
-            if more and limit is not None and len(found) >= limit:
+                # Solr matches are candidates only: the tokenised field also matches longer identifiers.
+                if doc.linked_activity_ids & wanted:
+                    copies[doc.key].append(doc)
+            if more and limit is not None and len(copies) >= limit:
                 return False
         return True
 
@@ -181,19 +264,29 @@ class SolrLinkSource:
         start = 0
         while True:
             budget.check()
-            results = self._search(query, rows=rows, start=start)
+            results = self._search(query, rows=rows, start=start, budget=budget)
             start += rows
             more = bool(results.docs) and start < results.hits
             yield _parse(results.docs), more
             if not more:
                 return
 
-    def _search(self, query: str, rows: int, start: int) -> pysolr.Results:
+    def _search(self, query: str, rows: int, start: int, budget: Budget) -> pysolr.Results:
+        # One query, however many connection retries it took: stats.solr_queries counts the traversal's work, which
+        # stays the same for the same chain. Each retry is logged by urllib3 at WARNING.
         self._query_count += 1
+        token = _query_budget.set(budget)
         try:
             return self._client.search(query, fl=_FL, rows=rows, start=start, sort=SORT)
         except (pysolr.SolrError, requests.RequestException, ValueError) as exc:
             _raise_source_error(exc, query)
+        finally:
+            _query_budget.reset(token)
+
+
+def _merged(copies: dict[NodeId, list[ActivityDoc]]) -> dict[NodeId, ActivityDoc]:
+    """One document per identifier, in key order. Some identifiers are published in several documents."""
+    return {key: ActivityDoc.merge(copies[key]) for key in sorted(copies)}
 
 
 def _parse(raw_docs: Iterable[dict]) -> list[ActivityDoc]:

@@ -76,6 +76,43 @@ class Settings(BaseSettings):
 MY_SETTING=
 ```
 
+## Default Limits
+
+Every limit that bounds the work or the size of one request. The ones in the first table are settings and can be set from `.env`. The others are constants in the code.
+
+### Configurable (`app/config.py`, `Settings`)
+
+| Setting | Default | Bound | What it limits |
+|---|---|---|---|
+| `MAX_DEPTH` | 20 | 1–50 (`MAX_DEPTH_CEILING`) | Hops per walk (up or down). A ceiling: callers can lower it with `?max_depth=` but not raise it. |
+| `MAX_NODES` | 1,000 | ≥ 1 | Nodes per response, organisations included. A ceiling, like `MAX_DEPTH`. It also sets the reverse-lookup limit (`mention_limit`): a mention query stops after this many matching documents. |
+| `ID_BATCH_SIZE` | 200 | 1–250 (`MAX_ID_BATCH_SIZE`) | Identifiers per Solr query (fetch and mention). |
+| `SOLR_TIMEOUT` | 10 s | > 0 | One Solr query (the pysolr client timeout). |
+| `REQUEST_TIMEOUT` | 30 s | > 0 | Time budget for one `/chain` request. When it runs out, the result is truncated (`time_budget`). |
+| `CACHE_TTL` | 86,400 s | > 0 | How long a response stays in Redis. |
+
+### Constants
+
+| Constant | Value | Where | What it limits |
+|---|---|---|---|
+| `MAX_DEPTH_CEILING` | 50 | `app/config.py` | Highest allowed `MAX_DEPTH`. The tree format recurses one level per hop, so this keeps it far from Python's recursion limit. |
+| `MAX_ID_BATCH_SIZE` | 250 | `app/config.py` | Highest allowed `ID_BATCH_SIZE`. A mention query uses 4 boolean clauses per identifier, and 250 × 4 = 1,000 stays under Solr's default `maxBooleanClauses` (1,024). |
+| `FETCH_MIN_ROWS` | 100 | `app/iati_cloud_dcma/source.py` | Smallest page size of a fetch by identifier, so a heavily duplicated identifier does not cost one query per copy. |
+| `MENTION_ROWS_PER_ID` | 5 | `app/iati_cloud_dcma/source.py` | Page size of a mention query, per identifier in the batch. |
+| `MENTION_MIN_ROWS` | 100 | `app/iati_cloud_dcma/source.py` | Smallest page size of a mention query. |
+| `CONNECTION_RETRIES` | 2 | `app/iati_cloud_dcma/source.py` | Retries of a Solr request after a connection failure. Read timeouts and HTTP errors are never retried, and no retry starts once the request budget is spent. |
+| `MAX_WALK_ROUNDS` | 3 | `app/iati_cloud_dcma/traversal.py` | How often the walks are repeated when a new spelling of an identifier turns up. |
+| `MAX_IDENTIFIER_LENGTH` | 255 | `app/iati_cloud_dcma/nodes.py` | Longer published identifiers are ignored, never sent back to Solr. |
+| `REDIS_TIMEOUT_SECONDS` | 2 | `app/cache.py` | Redis connect and read timeout. On failure the cache fails open. |
+| `LOG_SIZE` | 10 MB (5 backups) | `app/config.py` | Size of the rotating log file. |
+
+### Deployment
+
+| Setting | Value | Where | Note |
+|---|---|---|---|
+| Gunicorn `--workers` | 4 | `Dockerfile`, `docker-compose.yaml` | Concurrent `/chain` requests per container. Not load-tested. |
+| Gunicorn `--timeout` | 60 s | `Dockerfile`, `docker-compose.yaml` | Must stay above `REQUEST_TIMEOUT + SOLR_TIMEOUT`: a query that starts just before the budget runs out can still take its full timeout. Raise it with either setting. |
+
 ## Code Quality
 
 ```bash

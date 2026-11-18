@@ -1,8 +1,10 @@
-"""Recursive retrieval: up- and down-walks from a seed, the two modes, limits and relations (spec §6).
+"""Builds the delivery chain around a seed: walks up to its funders and down to what they fund, within the limits.
 
-Everything learned during one request lives in a private, request-scoped cache (_Knowledge), so each document is
-fetched at most once and each identifier's reverse lookup runs at most once. The walks return immutable summaries,
-and the result is an immutable Chain.
+Links are declared by either end (a funder may name its recipient, a recipient may name its funder), so each step
+both fetches an activity's own links and looks up the activities that mention it. Everything learned during one
+request is kept in a request-scoped cache (_Knowledge), so each identifier is fetched once and looked up once per
+spelling. The walks work in node keys (see links.py); the result is an
+immutable Chain in the spellings shown to callers.
 """
 
 from collections import defaultdict
@@ -13,25 +15,47 @@ from typing import Literal
 from app.iati_cloud_dcma.budget import UNLIMITED, Budget, BudgetExhausted
 from app.iati_cloud_dcma.chain import (
     MODES,
+    TRUNCATION_REASONS,
     ActivityNode,
     Chain,
     Mode,
     Node,
     OrganisationNode,
     Relation,
+    TruncationReason,
     distances_from,
     merge_associations,
     merge_edges,
     reachable_downward,
 )
-from app.iati_cloud_dcma.links import ActivityDoc, Edge, NodeId, is_org_node, is_structured_ref, org_ref_of
+from app.iati_cloud_dcma.links import ActivityDoc, Association, Edge, Organisation
+from app.iati_cloud_dcma.nodes import (
+    ORG_PREFIX,
+    Identification,
+    NodeId,
+    identification_of,
+    is_org_node,
+    node_key,
+    normalise_id,
+)
 from app.iati_cloud_dcma.source import LinkSource
 
 Step = Literal["up", "down", "co-funders"]
+# A reverse lookup only finds an identifier under the spellings queried. When a walk turns up a new spelling of an
+# identifier that was already looked up, the walks are repeated (from the request's cache, so only the new lookups
+# cost queries). Spellings rarely differ, so this bound is generous.
+MAX_WALK_ROUNDS = 3
+OrgLevel = Literal["identified", "refs", "all"]
+# Which organisation nodes each level of the `orgs` filter returns, from best identified to least.
+ORG_LEVELS: dict[OrgLevel, frozenset[Identification]] = {
+    "identified": frozenset({"identifier"}),
+    "refs": frozenset({"identifier", "free-text"}),
+    "all": frozenset({"identifier", "free-text", "name-only"}),
+}
 
 
 class SeedNotFound(LookupError):
-    """The seed is not published and no published activity references it (spec §7.3: 404)."""
+    """The seed is not published and no published activity references it. Answered with 404."""
 
 
 @dataclass(frozen=True)
@@ -51,82 +75,120 @@ def build_chain(
     limits: Limits,
     *,
     budget: Budget = UNLIMITED,
-    include_unstructured_orgs: bool = False,
+    orgs: OrgLevel = "identified",
 ) -> Chain:
-    """The delivery chain around `seed` (spec §6.2).
+    """The delivery chain around `seed`, which may be given in any letter case.
 
-    Raises SeedNotFound (unknown, unreferenced seed), BudgetExhausted (budget gone before the seed could be fetched)
-    and the source's SourceError subclasses.
+    In constrained mode: the seed, everything above it and everything below it. In full mode: everything above the seed,
+    everything below any of those, and the direct funders of the activities found below (co-funders, not explored).
+
+        Raises SeedNotFound (unknown, unreferenced seed), BudgetExhausted (budget gone before the seed could be fetched)
+        and the source's SourceError subclasses.
     """
     if mode not in MODES:
         raise ValueError(f"unknown mode: {mode!r}")
+    if orgs not in ORG_LEVELS:
+        raise ValueError(f"unknown orgs level: {orgs!r}")
+    spelling = normalise_id(seed)
+    if spelling is None:
+        raise ValueError("the seed is empty")
+    seed_key = node_key(spelling)
     knowledge = _Knowledge(source, budget, mention_limit=limits.max_nodes)
-    if not knowledge.fetch([seed]):
+    knowledge.note_spelling(seed_key, spelling)
+    if not knowledge.fetch([seed_key]):
         raise BudgetExhausted("the time budget ran out before the seed could be fetched")
-    if not knowledge.is_published(seed):
-        knowledge.mention([seed])
-        if not knowledge.is_referenced(seed) and knowledge.mention_complete(seed):
-            raise SeedNotFound(seed)
-    context = _Context(seed, limits, _Admission(limits.max_nodes, seed), include_unstructured_orgs, knowledge)
-
-    up = _walk(context, [seed], "up")
-    if mode == "constrained":
-        down = _walk(context, [seed], "down")
-        co_funders = _Step.empty()
-    else:
-        down = _walk(context, sorted(up.activities), "down")
-        co_funders = _co_funders(context, down.activities - up.activities, already=up.reached | down.reached)
+    if not knowledge.is_published(seed_key):
+        knowledge.mention([seed_key])
+        if not knowledge.is_referenced(seed_key) and knowledge.mention_complete(seed_key):
+            raise SeedNotFound(spelling)
+    for _round in range(MAX_WALK_ROUNDS):
+        context = _Context(seed_key, limits, _Admission(limits.max_nodes, seed_key), ORG_LEVELS[orgs], knowledge)
+        up = _walk(context, [seed_key], "up")
+        if mode == "constrained":
+            down = _walk(context, [seed_key], "down")
+            co_funders = _Step.empty()
+        else:
+            down = _walk(context, sorted(up.activities), "down")
+            co_funders = _co_funders(context, down.activities - up.activities, already=up.reached | down.reached)
+        if not knowledge.look_up_new_spellings():
+            break
     return _assemble(context, mode, up, down, co_funders)
 
 
-# --- Request-scoped knowledge ---------------------------------------------------------------------------------------
-
-
 class _Knowledge:
-    """What one request has learned from the link source. Each document is fetched, and each identifier's reverse
-    lookup run, at most once."""
+    """What one request has learned from the link source.
+
+    `docs` holds one merged document per activity seen. A document that arrived through a reverse lookup holds the
+    links of the matching copies only (an identifier can have several documents), so an activity's own links count as
+    complete only once it has been fetched by identifier.
+    """
 
     def __init__(self, source: LinkSource, budget: Budget, mention_limit: int):
         self._source = source
         self._budget = budget
         self._mention_limit = mention_limit
-        self.docs: dict[str, ActivityDoc] = {}
-        self.unpublished: set[str] = set()
-        self._mentioned: dict[str, bool] = {}  # identifier → was its reverse lookup complete?
+        self.docs: dict[NodeId, ActivityDoc] = {}
+        self.reasons: set[TruncationReason] = set()  # why queries or walks stopped early
+        self._fetched: set[NodeId] = set()
+        self._mentioned: dict[NodeId, bool] = {}  # whether all reverse lookups of the key were complete
+        self._queried: dict[NodeId, set[str]] = defaultdict(set)  # spellings already looked up, per key
+        self._spellings: dict[NodeId, set[str]] = defaultdict(set)
         self._edges: dict[NodeId, set[Edge]] = defaultdict(set)
-        self.cut_short = False  # the budget or the mention limit stopped a query
 
     def has_status(self, node: NodeId) -> bool:
-        return node in self.docs or node in self.unpublished
+        """Whether it is known that the activity is published or not."""
+        return node in self.docs or node in self._fetched
 
     def is_published(self, node: NodeId) -> bool:
         return node in self.docs
 
+    def note_spelling(self, node: NodeId, spelling: str) -> None:
+        self._spellings[node].add(spelling)
+
+    def spelling(self, node: NodeId) -> str:
+        """How an activity is shown: as its publisher spells it, else the first (sorted) spelling others used, so the
+        result is the same however the caller typed it."""
+        doc = self.docs.get(node)
+        return doc.iati_identifier if doc is not None else min(self._spellings[node])
+
     def fetch(self, ids: Iterable[NodeId]) -> bool:
-        """Fetch the documents not seen yet. False when the budget ran out first."""
-        missing = sorted({i for i in ids if not is_org_node(i) and not self.has_status(i)})
+        """Fetch the activities not fetched yet. False when the budget ran out first."""
+        missing = sorted({i for i in ids if not is_org_node(i) and i not in self._fetched})
         if not missing:
             return True
         try:
-            found = self._source.fetch(missing, budget=self._budget)
+            found = self._source.fetch([min(self._spellings[i]) for i in missing], budget=self._budget)
         except BudgetExhausted:
-            self.cut_short = True
+            self.reasons.add("time_budget")
             return False
         for doc in found.values():
             self._add(doc)
-        self.unpublished.update(i for i in missing if i not in found)
+        self._fetched.update(missing)
         return True
 
     def mention(self, ids: Iterable[NodeId]) -> None:
-        """Run the reverse lookup for identifiers that haven't had one."""
-        todo = sorted({i for i in ids if i not in self._mentioned})
-        if not todo:
-            return
-        result = self._source.mentioning(todo, budget=self._budget, limit=self._mention_limit)
+        """Run the reverse lookup for identifiers that haven't had one, under every spelling seen so far."""
+        self._look_up({i for i in ids if i not in self._mentioned})
+
+    def look_up_new_spellings(self) -> bool:
+        """Look up the spellings learned since an identifier's reverse lookup. False when there were none."""
+        return self._look_up(set(self._mentioned))
+
+    def _look_up(self, ids: set[NodeId]) -> bool:
+        new = {i: self._spellings[i] - self._queried[i] for i in sorted(ids)}
+        spellings = sorted({spelling for unqueried in new.values() for spelling in unqueried})
+        if not spellings:
+            return False
+        result = self._source.mentioning(spellings, budget=self._budget, limit=self._mention_limit)
         for doc in result.docs:
             self._add(doc)
-        self._mentioned.update((i, result.complete) for i in todo)
-        self.cut_short = self.cut_short or not result.complete
+        for i, unqueried in new.items():
+            if unqueried:
+                self._queried[i] |= unqueried
+                self._mentioned[i] = self._mentioned.get(i, True) and result.complete
+        if result.stopped_by is not None:
+            self.reasons.add(result.stopped_by)
+        return True
 
     def mention_complete(self, node: NodeId) -> bool:
         return self._mentioned.get(node, False)
@@ -141,10 +203,13 @@ class _Knowledge:
         return sorted({e.downstream for e in self._edges[node] if e.upstream == node})
 
     def _add(self, doc: ActivityDoc) -> None:
-        if doc.iati_identifier in self.docs:
-            return
-        self.docs[doc.iati_identifier] = doc
-        for edge in doc.edges:
+        known = self.docs.get(doc.key)
+        merged = doc if known is None else ActivityDoc.merge([known, doc])
+        self.docs[merged.key] = merged
+        self._spellings[merged.key].add(merged.iati_identifier)
+        for key, spelling in merged.labels:
+            self._spellings[key].add(spelling)
+        for edge in merged.edges:
             self._edges[edge.upstream].add(edge)
             self._edges[edge.downstream].add(edge)
 
@@ -172,21 +237,22 @@ class _Context:
     seed: NodeId
     limits: Limits
     admission: _Admission
-    include_unstructured_orgs: bool
+    org_identifications: frozenset[Identification]
     knowledge: _Knowledge
 
     def expandable(self, node: NodeId) -> bool:
-        """Published activities, and the seed even when unpublished (decision Q8)."""
+        """Published activities, and the seed even when unpublished.
+
+        An unpublished activity has no links of its own, but others may name it; for the seed, those are worth showing.
+        """
         return node == self.seed or self.knowledge.is_published(node)
 
     def keep(self, neighbours: Iterable[NodeId]) -> list[NodeId]:
-        """Leave out organisations with free-text refs unless they were asked for (decision Q9)."""
-        if self.include_unstructured_orgs:
-            return list(neighbours)
-        return [n for n in neighbours if not is_org_node(n) or is_structured_ref(org_ref_of(n))]
+        """Leave out the organisations that the `orgs` level does not ask for."""
+        return [n for n in neighbours if not is_org_node(n) or identification_of(n) in self.org_identifications]
 
 
-# --- Steps ----------------------------------------------------------------------------------------------------------
+# Steps
 
 
 @dataclass(frozen=True)
@@ -197,7 +263,6 @@ class _Step:
     reached: frozenset[NodeId]
     walked: frozenset[NodeId]
     wanted: Mapping[NodeId, frozenset[NodeId]]
-    truncated: bool
 
     @property
     def activities(self) -> frozenset[NodeId]:
@@ -205,26 +270,26 @@ class _Step:
 
     @classmethod
     def empty(cls) -> "_Step":
-        return cls(reached=frozenset(), walked=frozenset(), wanted={}, truncated=False)
+        return cls(reached=frozenset(), walked=frozenset(), wanted={})
 
 
 def _walk(context: _Context, starts: list[NodeId], direction: Literal["up", "down"]) -> _Step:
-    """Breadth-first walk from `starts` in one direction, up to max_depth hops (spec §6.1)."""
+    """Breadth-first walk from `starts` in one direction, up to max_depth hops.
+
+    Organisations end the walk where they appear, as do unpublished activities other than the seed.
+    """
     knowledge = context.knowledge
     seen: set[NodeId] = set(starts)
     walked: set[NodeId] = set()
     wanted: dict[NodeId, frozenset[NodeId]] = {}
-    truncated = False
     frontier = sorted(starts)
     for depth in range(context.limits.max_depth + 1):
-        if not frontier:
-            break
-        if not knowledge.fetch(frontier):
-            truncated = True
+        if not frontier or not knowledge.fetch(frontier):
             break
         expandable = [n for n in frontier if context.expandable(n)]
         if depth == context.limits.max_depth:
-            truncated = truncated or bool(expandable)
+            if expandable:
+                knowledge.reasons.add("max_depth")
             break
         knowledge.mention(expandable)
         next_frontier: list[NodeId] = []
@@ -233,92 +298,112 @@ def _walk(context: _Context, starts: list[NodeId], direction: Literal["up", "dow
             wanted[node] = frozenset(neighbours)
             if knowledge.mention_complete(node):
                 walked.add(node)
-            truncated = truncated or not knowledge.mention_complete(node)
-            truncated = _admit_new(context, neighbours, seen, next_frontier) or truncated
+            _admit_new(context, neighbours, seen, next_frontier)
         frontier = sorted(next_frontier)
-    return _Step(reached=frozenset(seen), walked=frozenset(walked), wanted=wanted, truncated=truncated)
+    return _Step(reached=frozenset(seen), walked=frozenset(walked), wanted=wanted)
 
 
-def _admit_new(context: _Context, neighbours: list[NodeId], seen: set[NodeId], frontier: list[NodeId]) -> bool:
-    """Admit unseen neighbours; activities join the next frontier. True when max_nodes refused one."""
-    refused = False
+def _admit_new(context: _Context, neighbours: list[NodeId], seen: set[NodeId], frontier: list[NodeId]) -> None:
+    """Admit unseen neighbours; activities join the next frontier. max_nodes may refuse some (see _Admission)."""
     for other in neighbours:
-        if other in seen:
-            continue
-        if not context.admission.admit(other):
-            refused = True
-            continue
-        seen.add(other)
-        if not is_org_node(other):
-            frontier.append(other)
-    return refused
+        if other not in seen and context.admission.admit(other):
+            seen.add(other)
+            if not is_org_node(other):
+                frontier.append(other)
 
 
 def _co_funders(context: _Context, below: frozenset[NodeId], already: frozenset[NodeId]) -> _Step:
-    """Full mode: direct upstream neighbours of the nodes in D that are not in A ∪ D, unexpanded (spec §6.2)."""
+    """Full mode: the other funders of the activities found below, one hop up and not explored further.
+
+    `below` are the activities found going down that are not ancestors; `already` is everything the walks reached.
+    """
     seen: set[NodeId] = set(already)
     activities: list[NodeId] = []
     wanted: dict[NodeId, frozenset[NodeId]] = {}
-    truncated = False
     for node in sorted(below):
         upstream = context.keep(context.knowledge.neighbours(node, "up"))
         wanted[node] = frozenset(upstream)
-        truncated = _admit_new(context, upstream, seen, activities) or truncated
-    if not context.knowledge.fetch(activities):  # metadata only: co-funders are never expanded
-        truncated = True
-    return _Step(reached=frozenset(seen - already), walked=below, wanted=wanted, truncated=truncated)
+        _admit_new(context, upstream, seen, activities)
+    context.knowledge.fetch(activities)  # metadata only: co-funders are never expanded
+    return _Step(reached=frozenset(seen - already), walked=below, wanted=wanted)
 
 
-# --- Assembly -------------------------------------------------------------------------------------------------------
+# Assembly
 
 
 def _assemble(context: _Context, mode: Mode, up: _Step, down: _Step, co_funders: _Step) -> Chain:
+    """Turn what the walks reached into a Chain: choose the nodes, then translate keys into shown identifiers."""
     knowledge = context.knowledge
     node_ids = frozenset(n for n in context.admission.admitted if is_org_node(n) or knowledge.has_status(n))
+    organisations = _organisations(knowledge.docs.values())
+    shown = {n: _shown_id(n, knowledge, organisations) for n in node_ids}
     edges = merge_edges(
-        edge for doc in knowledge.docs.values() for edge in doc.edges if {edge.upstream, edge.downstream} <= node_ids
+        Edge(shown[edge.upstream], shown[edge.downstream], edge.kind, shown[edge.declared_by])
+        for doc in knowledge.docs.values()
+        for edge in doc.edges
+        if {edge.upstream, edge.downstream} <= node_ids
     )
+    linked = {frozenset((edge.upstream, edge.downstream)) for edge in edges}
     associations = merge_associations(
-        a for doc in knowledge.docs.values() for a in doc.associations if set(a.activities) <= node_ids
+        Association(pair, a.role, shown[a.declared_by])
+        for doc in knowledge.docs.values()
+        for a in doc.associations
+        if set(a.activities) <= node_ids
+        # skip associations between activities that an edge already joins, so one link is not shown twice
+        for pair in [_sorted_pair(shown[a.activities[0]], shown[a.activities[1]])]
+        if frozenset(pair) not in linked
     )
-    distances = distances_from(context.seed, edges)
-    relations = _relations(context.seed, mode, up, down, reachable_downward(context.seed, edges), node_ids)
+    seed = shown[context.seed]
+    distances = distances_from(seed, edges)
+    below_seed = reachable_downward(seed, edges, frozenset(shown[n] for n in node_ids if is_org_node(n)))
     expanded = _expanded(mode, up, down, co_funders, node_ids)
-    org_names = _organisation_names(knowledge.docs.values())
     nodes = tuple(
         sorted(
-            (_node(n, relations[n], distances.get(n), expanded, knowledge, org_names) for n in node_ids),
+            (
+                _node(
+                    n,
+                    shown[n],
+                    _relation(n, context.seed, mode, up, down, shown[n] in below_seed),
+                    distances,
+                    expanded,
+                    knowledge,
+                    organisations,
+                )
+                for n in node_ids
+            ),
             key=lambda node: (node.distance if node.distance is not None else len(node_ids), node.id),
         )
     )
-    truncated = (
-        up.truncated
-        or down.truncated
-        or co_funders.truncated
-        or context.admission.refused
-        or knowledge.cut_short
-        or len(node_ids) < len(context.admission.admitted)
-    )
-    return Chain(context.seed, mode, truncated, nodes, edges, associations)
+    reasons = set(knowledge.reasons)
+    if context.admission.refused:
+        reasons.add("max_nodes")
+    return Chain(seed, mode, tuple(r for r in TRUNCATION_REASONS if r in reasons), nodes, edges, associations)
 
 
-def _relations(
-    seed: NodeId, mode: Mode, up: _Step, down: _Step, below_seed: frozenset[NodeId], node_ids: frozenset[NodeId]
-) -> dict[NodeId, Relation]:
-    """One relation per node, by precedence: seed, ancestor, descendant, related, co-funder (spec §6.4)."""
+def _sorted_pair(first: str, second: str) -> tuple[str, str]:
+    return (first, second) if first <= second else (second, first)
 
-    def relation(node: NodeId) -> Relation:
-        if node == seed:
-            return "seed"
-        if node in up.reached:
-            return "ancestor"
-        if mode == "constrained" or node in below_seed:
-            return "descendant"
-        if node in down.reached:
-            return "related"
-        return "co-funder"
 
-    return {node: relation(node) for node in node_ids}
+def _shown_id(node: NodeId, knowledge: _Knowledge, organisations: Mapping[NodeId, Organisation]) -> str:
+    """The identifier a node is shown with: published spellings for activities and refs, the key for name-only."""
+    if not is_org_node(node):
+        return knowledge.spelling(node)
+    ref = organisations[node].ref
+    return f"{ORG_PREFIX}{ref}" if ref is not None else node
+
+
+def _relation(node: NodeId, seed: NodeId, mode: Mode, up: _Step, down: _Step, below_seed: bool) -> Relation:
+    """How a node relates to the seed. A node reached several ways gets the first that applies: seed, ancestor,
+    descendant, related, co-funder."""
+    if node == seed:
+        return "seed"
+    if node in up.reached:
+        return "ancestor"
+    if mode == "constrained" or below_seed:
+        return "descendant"
+    if node in down.reached:
+        return "related"
+    return "co-funder"
 
 
 def _expanded(mode: Mode, up: _Step, down: _Step, co_funders: _Step, node_ids: frozenset[NodeId]) -> set[NodeId]:
@@ -343,30 +428,36 @@ def _expanded(mode: Mode, up: _Step, down: _Step, co_funders: _Step, node_ids: f
     }
 
 
-def _organisation_names(docs: Iterable[ActivityDoc]) -> dict[str, str | None]:
-    """First non-empty name per organisation ref, reading documents in identifier order."""
-    names: dict[str, str | None] = {}
-    for doc in sorted(docs, key=lambda d: d.iati_identifier):
-        for organisation in doc.organisations:
-            if names.get(organisation.ref) is None:
-                names[organisation.ref] = organisation.name
-    return names
+def _organisations(docs: Iterable[ActivityDoc]) -> dict[NodeId, Organisation]:
+    """One record per organisation node: the first ref spelling and the first non-empty name, reading documents in
+    identifier order."""
+    records: dict[NodeId, Organisation] = {}
+    for doc in sorted(docs, key=lambda d: d.key):
+        for organisation in sorted(doc.organisations, key=lambda o: (o.node_id, o.ref or "", o.name or "")):
+            known = records.get(organisation.node_id)
+            if known is None:
+                records[organisation.node_id] = organisation
+            elif known.name is None and organisation.name is not None:
+                records[organisation.node_id] = Organisation(known.node_id, known.ref, organisation.name)
+    return records
 
 
 def _node(
     node_id: NodeId,
+    shown_id: str,
     relation: Relation,
-    distance: int | None,
+    distances: Mapping[str, int],
     expanded: set[NodeId],
     knowledge: _Knowledge,
-    org_names: Mapping[str, str | None],
+    organisations: Mapping[NodeId, Organisation],
 ) -> Node:
+    distance = distances.get(shown_id)
     if is_org_node(node_id):
-        ref = org_ref_of(node_id)
-        return OrganisationNode(node_id, relation, distance, ref, org_names.get(ref), is_structured_ref(ref))
+        record = organisations[node_id]
+        return OrganisationNode(shown_id, relation, distance, record.ref, record.name, record.identification)
     doc = knowledge.docs.get(node_id)
     return ActivityNode(
-        id=node_id,
+        id=shown_id,
         relation=relation,
         distance=distance,
         expanded=node_id in expanded,

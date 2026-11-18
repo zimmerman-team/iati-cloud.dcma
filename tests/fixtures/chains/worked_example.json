@@ -1,5 +1,5 @@
 {
- "captured": "2026-11-06",
+ "captured": "2026-11-16",
  "solr_url": "https://fcdo.iati.cloud/search/activity/",
  "limits": {
   "max_depth": 10,
@@ -8,25 +8,32 @@
  "runs": [
   {
    "seed": "GB-CHC-1047501-23SOELNF",
-   "mode": "constrained",
-   "nodes": 4,
-   "truncated": false
+   "mode": "full",
+   "orgs": "all",
+   "nodes": 82,
+   "edges": 102,
+   "truncation_reasons": []
   },
   {
    "seed": "GB-CHC-1047501-23SOELNF",
-   "mode": "full",
-   "nodes": 67,
-   "truncated": false
+   "mode": "constrained",
+   "orgs": "all",
+   "nodes": 4,
+   "edges": 3,
+   "truncation_reasons": []
   },
   {
    "seed": "GB-GOV-1-300978",
    "mode": "constrained",
-   "nodes": 62,
-   "truncated": false
+   "orgs": "all",
+   "nodes": 76,
+   "edges": 94,
+   "truncation_reasons": []
   }
  ],
  "docs": [
   {
+   "last-updated-datetime": "2024-01-09T15:52:50Z",
    "hierarchy": 1,
    "iati-identifier": "GB-CHC-1047501-22SOHARF",
    "reporting-org.ref": "GB-CHC-1047501",
@@ -49,9 +56,11 @@
     "{\"ref\": \" 22SOHARF-IN-3\", \"transaction-type\": {\"code\": 1}, \"transaction-date\": {\"iso-date\": \"2023-04-13\"}, \"value\": 10.8, \"description\": {\"narrative\": \"Bank Fees\", \"narrative.lang\": \" \"}, \"provider-org\": {\"ref\": \"NO-BRC-977538319\", \"type\": 21, \"narrative\": \"Norwegian Refugee Council\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"GB-CHC-1047501\", \"type\": 21, \"narrative\": \"AAH UK\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2023-04-13\"}",
     "{\"ref\": \" 22SOHARF-OUT-2\", \"transaction-type\": {\"code\": 3}, \"transaction-date\": {\"iso-date\": \"2023-08-02\"}, \"value\": 237548.8, \"provider-org\": {\"ref\": \"GB-CHC-1047501\", \"type\": 21, \"narrative\": \"AAH UK\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"US-EIN-13-3327220\", \"type\": 21, \"narrative\": \"AAH USA\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2023-08-02\"}",
     "{\"ref\": \"22SOHARF-OUT-1\", \"transaction-type\": {\"code\": 3}, \"transaction-date\": {\"iso-date\": \"2023-01-16\"}, \"value\": 502451.2, \"provider-org\": {\"ref\": \"GB-CHC-1047501\"}, \"receiver-org\": {\"ref\": \"US-EIN-13-3327220\"}, \"value.value-date\": \"2023-01-16\"}"
-   ]
+   ],
+   "id": "bb92de57-27d4-41a7-90a4-5bc35f5b550e"
   },
   {
+   "last-updated-datetime": "2026-05-29T15:06:03Z",
    "hierarchy": 1,
    "iati-identifier": "GB-CHC-1047501-23SOBR3F",
    "reporting-org.ref": "GB-CHC-1047501",
@@ -93,9 +102,11 @@
     "{\"ref\": \"23SOBR3F-OUT-02\", \"transaction-type\": {\"code\": 3}, \"transaction-date\": {\"iso-date\": \"2024-09-20\"}, \"value\": 208266.7, \"provider-org\": {\"ref\": \"GB-CHC-1047501\", \"provider-activity-id\": \"GB-CHC-1047501-23SOBR3F\", \"type\": 21, \"narrative\": \"ACF UK\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"US-EIN-13-3327220\", \"type\": 21, \"narrative\": \"ACF USA\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2024-09-20\"}",
     "{\"ref\": \"23SOBR3F-CR-02\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2024-09-20\"}, \"value\": 2148.3, \"description\": {\"narrative\": \"UK CR\", \"narrative.lang\": \" \"}, \"provider-org\": {\"ref\": \"GB-CHC-1047501\", \"provider-activity-id\": \"GB-CHC-1047501-23SOBR3F\", \"type\": 21, \"narrative\": \"ACF UK\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2024-09-20\"}",
     "{\"ref\": \"23SOBR3F-OUT-01\", \"transaction-type\": {\"code\": 3}, \"transaction-date\": {\"iso-date\": \"2024-05-02\"}, \"value\": 147426.7, \"provider-org\": {\"ref\": \"GB-CHC-1047501\", \"provider-activity-id\": \"GB-CHC-1047501-23SOBR3F\", \"type\": 21, \"narrative\": \"ACF UK\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"US-EIN-13-3327220\", \"type\": 21, \"narrative\": \"ACF USA\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2024-05-02\"}"
-   ]
+   ],
+   "id": "6f3ee798-ad06-4a7c-ba0b-874daa1c7319"
   },
   {
+   "last-updated-datetime": "2024-04-08T13:29:26Z",
    "hierarchy": 1,
    "iati-identifier": "GB-CHC-1047501-23SOELNF",
    "reporting-org.ref": "GB-CHC-1047501",
@@ -115,9 +126,11 @@
     "{\"ref\": \" 23SOELNF-OUT-01\", \"transaction-type\": {\"code\": 3}, \"transaction-date\": {\"iso-date\": \"2023-12-12\"}, \"value\": 1500000, \"provider-org\": {\"ref\": \"GB-CHC-1047501\", \"provider-activity-id\": \"GB-CHC-1047501-23SOELNF\", \"type\": 21, \"narrative\": \"ACTION AGAINST HUNGER UK\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"US-EIN-13-3327220\", \"type\": 21, \"narrative\": \"ACTION AGAINST HUNGER USA\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2023-12-12\"}",
     "{\"ref\": \"23SOELNF-CR-01\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2023-12-06\"}, \"value\": 15000, \"description\": {\"narrative\": \"COST RECOVERY TOTAL\", \"narrative.lang\": \" \"}, \"provider-org\": {\"ref\": \"GB-CHC-1047501\", \"provider-activity-id\": \"GB-CHC-1047501-23SOELNF\", \"type\": 21, \"narrative\": \"ACTION AGAINST HUNGER UK\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2023-12-06\"}",
     "{\"ref\": \"23SOELNF-IN-01\", \"transaction-type\": {\"code\": 1}, \"transaction-date\": {\"iso-date\": \"2023-12-05\"}, \"value\": 2500000, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-408\", \"type\": 10}, \"receiver-org\": {\"ref\": \"GB-CHC-1047501\", \"receiver-activity-id\": \"GB-CHC-1047501-23SOELNF\", \"type\": 21}, \"value.currency\": \"GBP\", \"value.value-date\": \"2023-12-05\"}"
-   ]
+   ],
+   "id": "39b863d3-7734-44ea-8f4a-11a27eb1a4ed"
   },
   {
+   "last-updated-datetime": "2026-08-18T08:18:15Z",
    "hierarchy": 1,
    "iati-identifier": "GB-CHC-1047501-25SOELNF",
    "reporting-org.ref": "GB-CHC-1047501",
@@ -143,7 +156,8 @@
     "{\"ref\": \"25SOELNF-IN-02\", \"humanitarian\": 1, \"transaction-type\": {\"code\": 1}, \"transaction-date\": {\"iso-date\": \"2025-08-12\"}, \"value\": 2066982, \"value.currency\": \"GBP\", \"value.value-date\": \"2025-08-12\"}",
     "{\"ref\": \"25SOELNF-OUT-02\", \"humanitarian\": 1, \"transaction-type\": {\"code\": 3}, \"transaction-date\": {\"iso-date\": \"2026-01-08\"}, \"value\": 2044873.8, \"value.currency\": \"GBP\", \"value.value-date\": \"2026-01-08\"}",
     "{\"ref\": \"25SOELNF-CR-02\", \"humanitarian\": 1, \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2026-01-08\"}, \"value\": 22108.2, \"value.value-date\": \"2026-01-08\"}"
-   ]
+   ],
+   "id": "10176bd8-0722-43b8-afcc-da277da6d283"
   },
   {
    "hierarchy": 1,
@@ -207,7 +221,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 2}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 2}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 2}"
-   ]
+   ],
+   "id": "0d108c84-8de0-4f4d-a4d5-9f6d42dbe126"
   },
   {
    "hierarchy": 2,
@@ -352,7 +367,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "266555d6-1334-4444-89ec-c715e39c4b6b"
   },
   {
    "hierarchy": 2,
@@ -416,7 +432,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "965451cd-13e2-4a44-9e68-cf6af760f35a"
   },
   {
    "hierarchy": 2,
@@ -465,7 +482,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "1a78db5d-b767-4a95-b88e-d02a773018c5"
   },
   {
    "hierarchy": 2,
@@ -517,7 +535,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "49232e3b-7d4f-47a1-bece-1d90bfee396b"
   },
   {
    "hierarchy": 2,
@@ -572,7 +591,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "829eacdf-8e7d-43f0-be45-e8a3b1902716"
   },
   {
    "hierarchy": 2,
@@ -626,7 +646,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "d838b18b-ae47-45ea-9626-8479abb1fe75"
   },
   {
    "hierarchy": 2,
@@ -677,7 +698,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "ccd7c37e-22b6-45ce-9295-9db38be33c18"
   },
   {
    "hierarchy": 2,
@@ -726,7 +748,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "d641f636-7371-42fd-a9fc-d29ab8cb3619"
   },
   {
    "hierarchy": 2,
@@ -774,7 +797,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "ea1080fb-9a12-4aa3-8c4a-1abe05008311"
   },
   {
    "hierarchy": 2,
@@ -824,7 +848,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "f08d25e8-cf9f-4142-b028-aa7a961a0ac4"
   },
   {
    "hierarchy": 2,
@@ -872,7 +897,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "e88e0483-2c03-4512-b809-b648fc327366"
   },
   {
    "hierarchy": 2,
@@ -922,7 +948,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "27f2b2df-e5e6-4d97-8182-6e641ac3baf4"
   },
   {
    "hierarchy": 2,
@@ -1013,7 +1040,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "49201122-3379-42ad-8c2f-4444e6aba2d6"
   },
   {
    "hierarchy": 2,
@@ -1073,7 +1101,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "27b793cf-7cc7-413f-984b-9de86c718ab1"
   },
   {
    "hierarchy": 2,
@@ -1131,7 +1160,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "b32d62bc-864d-43fe-810b-96a33ef220bc"
   },
   {
    "hierarchy": 2,
@@ -1200,7 +1230,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "3785ca1b-3a60-484c-89f7-fbdd933fd6de"
   },
   {
    "hierarchy": 2,
@@ -1337,7 +1368,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "64577f73-e559-4850-986c-17ae4af3e718"
   },
   {
    "hierarchy": 2,
@@ -1405,7 +1437,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "cffe4289-987d-4bc6-b6a3-05700a951fef"
   },
   {
    "hierarchy": 2,
@@ -1478,7 +1511,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "649a8147-0553-4841-9592-3f895dd54cff"
   },
   {
    "hierarchy": 2,
@@ -1546,7 +1580,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "c0b80e6e-df43-4b71-9f1d-a0138545f21a"
   },
   {
    "hierarchy": 2,
@@ -1608,7 +1643,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "2340c3ca-e996-4f35-a782-9ea02fa5ba37"
   },
   {
    "hierarchy": 2,
@@ -1659,7 +1695,8 @@
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "6eeb7e56-e543-4a90-b3c7-55dc60013963"
   },
   {
    "hierarchy": 2,
@@ -1761,7 +1798,8 @@
     "{\"ref\": \"GB-GOV-1-300978-410\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "e098c1d7-ac44-4150-b1ed-611e377989b6"
   },
   {
    "hierarchy": 2,
@@ -1812,7 +1850,8 @@
     "{\"ref\": \"GB-GOV-1-300978-410\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-413\", \"type\": 3}"
-   ]
+   ],
+   "id": "67e63b79-8869-42ed-8ef7-f81c56c1cfbf"
   },
   {
    "hierarchy": 2,
@@ -1855,9 +1894,11 @@
     "{\"ref\": \"GB-GOV-1-300978-410\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-411\", \"type\": 3}",
     "{\"ref\": \"GB-GOV-1-300978-412\", \"type\": 3}"
-   ]
+   ],
+   "id": "43396ee5-2945-4e9f-a63e-82c8b77b4a0d"
   },
   {
+   "last-updated-datetime": "2026-10-29T12:37:40.547Z",
    "iati-identifier": "IE-CHY-20009601-FCDO23SOM",
    "reporting-org.ref": "IE-CHY-20009601",
    "reporting-org.narrative": [
@@ -1891,9 +1932,11 @@
     "{\"ref\": \"Trocaire Expenditure\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2025-02-28\"}, \"value\": 1407.07, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-408\", \"type\": 10, \"narrative\": \"FCDO\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"IE-CHY-20009601\", \"receiver-activity-id\": \"IE-CHY-2009601-FCDO23SOM\", \"type\": 21, \"narrative\": \"Trocaire Ireland\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2025-02-28\"}",
     "{\"ref\": \"FCDO23SOM\", \"transaction-type\": {\"code\": 1}, \"transaction-date\": {\"iso-date\": \"2024-12-31\"}, \"value\": 522146.07, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-408\", \"type\": 10, \"narrative\": \"FCDO\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"IE-CHY-20009601\", \"receiver-activity-id\": \"IE-CHY-2009601-FCDO23SOM\", \"type\": 21, \"narrative\": \"Trocaire Ireland\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2024-12-31\"}",
     "{\"ref\": \"Trocaire Expenditure\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2024-12-31\"}, \"value\": -109503.84, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-408\", \"type\": 10, \"narrative\": \"FCDO\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"IE-CHY-20009601\", \"receiver-activity-id\": \"IE-CHY-2009601-FCDO23SOM\", \"type\": 21, \"narrative\": \"Trocaire Ireland\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2024-12-31\"}"
-   ]
+   ],
+   "id": "5911c3f1-c132-4afa-9930-2fdc71b8230d"
   },
   {
+   "last-updated-datetime": "2026-10-29T12:37:40.547Z",
    "iati-identifier": "IE-CHY-20009601-FCDO24ESOM",
    "reporting-org.ref": "IE-CHY-20009601",
    "reporting-org.narrative": [
@@ -1923,9 +1966,11 @@
     "{\"ref\": \"Trocaire Expenditure\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2025-07-31\"}, \"value\": 43471.18, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-408\", \"type\": 10, \"narrative\": \"FCDO\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"IE-CHY-20009601\", \"receiver-activity-id\": \"IE-CHY-20009601-FCDO24ESOM\", \"type\": 21, \"narrative\": \"Trocaire Ireland\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2025-07-31\"}",
     "{\"ref\": \"FCDO24ESOM\", \"transaction-type\": {\"code\": 1}, \"transaction-date\": {\"iso-date\": \"2025-11-30\"}, \"value\": 80407.27, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-408\", \"type\": 10, \"narrative\": \"FCDO\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"IE-CHY-20009601\", \"receiver-activity-id\": \"IE-CHY-20009601-FCDO24ESOM\", \"type\": 21, \"narrative\": \"Trocaire Ireland\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2025-11-30\"}",
     "{\"ref\": \"Trocaire Expenditure\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2025-07-31\"}, \"value\": 3046.89633924002, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-408\", \"type\": 10, \"narrative\": \"FCDO\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"IE-CHY-20009601\", \"receiver-activity-id\": \"IE-CHY-20009601-FCDO24ESOM\", \"type\": 21, \"narrative\": \"Trocaire Ireland\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2025-07-31\"}"
-   ]
+   ],
+   "id": "4c1af7ef-633b-4efd-8f2f-a5b3c7e8d8b7"
   },
   {
+   "last-updated-datetime": "2026-10-29T12:37:40.547Z",
    "iati-identifier": "IE-CHY-20009601-FCDO24SOM",
    "reporting-org.ref": "IE-CHY-20009601",
    "reporting-org.narrative": [
@@ -1959,9 +2004,11 @@
     "{\"ref\": \"FCDO24SOM\", \"transaction-type\": {\"code\": 1}, \"transaction-date\": {\"iso-date\": \"2024-12-31\"}, \"value\": 42309.88, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-408\", \"type\": 10, \"narrative\": \"FCDO\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"IE-CHY-20009601\", \"receiver-activity-id\": \"IE-CHY-20009601-FCDO24SOM\", \"type\": 21, \"narrative\": \"Trocaire Ireland\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2024-12-31\"}",
     "{\"ref\": \"Trocaire Expenditure\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2024-12-31\"}, \"value\": -696.83, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-408\", \"type\": 10, \"narrative\": \"FCDO\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"IE-CHY-20009601\", \"receiver-activity-id\": \"IE-CHY-20009601-FCDO24SOM\", \"type\": 21, \"narrative\": \"Trocaire Ireland\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2024-12-31\"}",
     "{\"ref\": \"Trocaire Expenditure\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2024-12-31\"}, \"value\": -194209.98, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-408\", \"type\": 10, \"narrative\": \"FCDO\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"IE-CHY-20009601\", \"receiver-activity-id\": \"IE-CHY-20009601-FCDO24SOM\", \"type\": 21, \"narrative\": \"Trocaire Ireland\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2024-12-31\"}"
-   ]
+   ],
+   "id": "408d64f7-a9a6-4cce-ac69-6e062feaab15"
   },
   {
+   "last-updated-datetime": "2026-10-29T12:37:40.547Z",
    "iati-identifier": "IE-CHY-20009601-FCDO25SOM",
    "reporting-org.ref": "IE-CHY-20009601",
    "reporting-org.narrative": [
@@ -1988,9 +2035,11 @@
     "{\"ref\": \"Trocaire Expenditure\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2026-02-28\"}, \"value\": 63886.43, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-CHC-1047501-25SOELNF\", \"type\": 10, \"narrative\": \"FCDO\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"IE-CHY-20009601\", \"receiver-activity-id\": \"IE-CHY-20009601-FCDO25SOM\", \"type\": 21, \"narrative\": \"Trocaire Ireland\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2026-02-28\"}",
     "{\"ref\": \"Trocaire Expenditure\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2026-03-31\"}, \"value\": 172510.03, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-CHC-1047501-25SOELNF\", \"type\": 10, \"narrative\": \"FCDO\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"IE-CHY-20009601\", \"receiver-activity-id\": \"IE-CHY-20009601-FCDO25SOM\", \"type\": 21, \"narrative\": \"Trocaire Ireland\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2026-03-31\"}",
     "{\"ref\": \"FCDO25SOM\", \"transaction-type\": {\"code\": 1}, \"transaction-date\": {\"iso-date\": \"2026-09-30\"}, \"value\": 62201.89, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-CHC-1047501-25SOELNF\", \"type\": 10, \"narrative\": \"FCDO\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"IE-CHY-20009601\", \"receiver-activity-id\": \"IE-CHY-20009601-FCDO25SOM\", \"type\": 21, \"narrative\": \"Trocaire Ireland\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2026-09-30\"}"
-   ]
+   ],
+   "id": "e0635a2a-9a1c-450b-b0c0-03a8b0682f28"
   },
   {
+   "last-updated-datetime": "2026-10-29T12:37:40.547Z",
    "iati-identifier": "IE-CHY-20009601-FCDO26SOM",
    "reporting-org.ref": "IE-CHY-20009601",
    "reporting-org.narrative": [
@@ -2015,9 +2064,11 @@
     "{\"ref\": \"Trocaire Expenditure\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2026-07-31\"}, \"value\": 73162.18, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-408\", \"type\": 10, \"narrative\": \"FCDO\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"IE-CHY-20009601\", \"receiver-activity-id\": \"IE-CHY-20009601-FCDO26SOM\", \"type\": 21, \"narrative\": \"Trocaire Ireland\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2026-07-31\"}",
     "{\"ref\": \"Trocaire Expenditure\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2026-08-31\"}, \"value\": 68700.56, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-408\", \"type\": 10, \"narrative\": \"FCDO\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"IE-CHY-20009601\", \"receiver-activity-id\": \"IE-CHY-20009601-FCDO26SOM\", \"type\": 21, \"narrative\": \"Trocaire Ireland\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2026-08-31\"}",
     "{\"ref\": \"Trocaire Expenditure\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2026-09-30\"}, \"value\": 87482.73, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-408\", \"type\": 10, \"narrative\": \"FCDO\", \"narrative.lang\": \" \"}, \"receiver-org\": {\"ref\": \"IE-CHY-20009601\", \"receiver-activity-id\": \"IE-CHY-20009601-FCDO26SOM\", \"type\": 21, \"narrative\": \"Trocaire Ireland\", \"narrative.lang\": \" \"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2026-09-30\"}"
-   ]
+   ],
+   "id": "77ee288e-e2a6-4968-91d8-a886304090d7"
   },
   {
+   "last-updated-datetime": "2026-03-10T13:12:55Z",
    "hierarchy": 1,
    "iati-identifier": "NO-BRC-977538319-SOFM2240",
    "reporting-org.ref": "NO-BRC-977538319",
@@ -2043,9 +2094,11 @@
     "{\"ref\": \"2023 Q1 Expenditure\", \"humanitarian\": 1, \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2023-03-31\"}, \"value\": 4504472, \"description\": {\"narrative\": \"2023 Q1 Expenditure\", \"narrative.lang\": \"en\"}, \"value.currency\": \"NOK\", \"value.value-date\": \"2023-03-31\"}",
     "{\"ref\": \"NO-BRC-977538319-SOFM2242 Incoming Commitment\", \"humanitarian\": 1, \"transaction-type\": {\"code\": 11}, \"transaction-date\": {\"iso-date\": \"2022-10-03\"}, \"value\": 770143, \"description\": {\"narrative\": \"NRC Outgoing Commitment\", \"narrative.lang\": \"en\"}, \"provider-org\": {\"ref\": \"NO-BRC-977538319\", \"provider-activity-id\": \"NO-BRC-977538319-SOFM2242\", \"type\": 21}, \"receiver-org\": {\"ref\": \"NO-BRC-977538319\", \"receiver-activity-id\": \"NO-BRC-977538319-SOFM2240\", \"type\": 21}, \"value.currency\": \"GBP\", \"value.value-date\": \"2022-10-03\"}",
     "{\"ref\": \"2022 Q2 Expenditure\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2023-09-30\"}, \"value\": 2394729, \"description\": {\"narrative\": \"2022 Q2 Expenditure\", \"narrative.lang\": \"en\"}, \"value.currency\": \"NOK\", \"value.value-date\": \"2023-09-30\"}"
-   ]
+   ],
+   "id": "3d61b3d0-6283-4721-bb6d-c884537d3d0f"
   },
   {
+   "last-updated-datetime": "2026-03-10T13:12:55Z",
    "hierarchy": 1,
    "iati-identifier": "NO-BRC-977538319-SOFM2242",
    "reporting-org.ref": "NO-BRC-977538319",
@@ -2102,9 +2155,11 @@
     "{\"ref\": \"FCDO Incoming Funds OCT-DEC 2023\", \"transaction-type\": {\"code\": 1}, \"transaction-date\": {\"iso-date\": \"2023-11-29\"}, \"value\": 187512, \"description\": {\"narrative\": \"FCDO Incoming Funds OCT-DEC 2023\", \"narrative.lang\": \"en\"}, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-105, GB-GOV-1-300978-106, GB-GOV-1-300978-107\", \"type\": 10}, \"receiver-org\": {\"ref\": \"NO-BRC-977538319\", \"receiver-activity-id\": \"NO-BRC-977538319-SOFM2242\", \"type\": 21}, \"value.currency\": \"GBP\", \"value.value-date\": \"2023-11-29\"}",
     "{\"ref\": \"2023 Q2 Expenditure\", \"humanitarian\": 1, \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2023-06-30\"}, \"value\": 512757, \"description\": {\"narrative\": \"2023 Q2 Expenditure\", \"narrative.lang\": \"en\"}, \"value.currency\": \"NOK\", \"value.value-date\": \"2023-06-30\"}",
     "{\"ref\": \"2023 Q3 Expenditure\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2023-09-30\"}, \"value\": 355366, \"description\": {\"narrative\": \"2023 Q3 Expenditure\", \"narrative.lang\": \"en\"}, \"value.currency\": \"NOK\", \"value.value-date\": \"2023-09-30\"}"
-   ]
+   ],
+   "id": "e9b747d2-e6ac-4c76-8676-30cbc6365ba6"
   },
   {
+   "last-updated-datetime": "2026-03-10T13:07:48Z",
    "hierarchy": 1,
    "iati-identifier": "NO-BRC-977538319-SOFM2330",
    "reporting-org.ref": "NO-BRC-977538319",
@@ -2130,9 +2185,11 @@
     "{\"ref\": \"DEC 23 Funds distributed to partners - SSWC\", \"humanitarian\": 1, \"transaction-type\": {\"code\": 3}, \"transaction-date\": {\"iso-date\": \"2023-12-25\"}, \"value\": 1059605, \"description\": {\"narrative\": \"DEC 23 Funds distributed to partners - SSWC\", \"narrative.lang\": \"en\"}, \"provider-org\": {\"ref\": \"NO-BRC-977538319\", \"provider-activity-id\": \"NO-BRC-977538319-SOFM2330\", \"type\": 21}, \"value.currency\": \"NOK\", \"value.value-date\": \"2023-12-25\"}",
     "{\"ref\": \"DEC 23 Funds distributed to partners - JUBA FOUNDATION\", \"humanitarian\": 1, \"transaction-type\": {\"code\": 3}, \"transaction-date\": {\"iso-date\": \"2023-12-25\"}, \"value\": 1059605, \"description\": {\"narrative\": \"DEC 23 Funds distributed to partners - JUBA FOUNDATION\", \"narrative.lang\": \"en\"}, \"provider-org\": {\"ref\": \"NO-BRC-977538319\", \"provider-activity-id\": \"NO-BRC-977538319-SOFM2330\", \"type\": 21}, \"value.currency\": \"NOK\", \"value.value-date\": \"2023-12-25\"}",
     "{\"ref\": \"2025 Q1 Expenditure\", \"transaction-type\": {\"code\": 4}, \"transaction-date\": {\"iso-date\": \"2025-03-31\"}, \"value\": 4083218, \"description\": {\"narrative\": \"2025 Q1 Expenditure\", \"narrative.lang\": \"en\"}, \"value.currency\": \"NOK\", \"value.value-date\": \"2025-03-31\"}"
-   ]
+   ],
+   "id": "d576783e-6f1e-45fb-98c1-537b2dbc31a0"
   },
   {
+   "last-updated-datetime": "2026-03-10T13:07:48Z",
    "hierarchy": 1,
    "iati-identifier": "NO-BRC-977538319-SOFM2343",
    "reporting-org.ref": "NO-BRC-977538319",
@@ -2260,7 +2317,8 @@
     "{\"ref\": \"FCDO Incoming Funds Apr-Jun 2025 (SCI)\", \"humanitarian\": 1, \"transaction-type\": {\"code\": 1}, \"transaction-date\": {\"iso-date\": \"2025-04-01\"}, \"value\": 268775, \"description\": {\"narrative\": \"FCDO Incoming Funds Apr-Jun 2025 (SCI)\", \"narrative.lang\": \"en\"}, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-405\", \"type\": 10, \"narrative\": \"FCDO Incoming Funds Apr-Jun 2025 (SCI)\", \"narrative.lang\": \"en\"}, \"receiver-org\": {\"ref\": \"GB-COH-213890\", \"type\": 10, \"narrative\": \"FCDO Incoming Funds Apr-Jun 2025 (SCI)\", \"narrative.lang\": \"en\"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2025-04-01\"}",
     "{\"ref\": \"FCDO Incoming Funds Apr-Jun 2025 (ACF)\", \"humanitarian\": 1, \"transaction-type\": {\"code\": 1}, \"transaction-date\": {\"iso-date\": \"2025-04-01\"}, \"value\": 170971, \"description\": {\"narrative\": \"FCDO Incoming Funds Apr-Jun 2025 (ACF)\", \"narrative.lang\": \"en\"}, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-405\", \"type\": 10, \"narrative\": \"FCDO Incoming Funds Apr-Jun 2025 (ACF)\", \"narrative.lang\": \"en\"}, \"receiver-org\": {\"ref\": \"GB-CHC-1047501\", \"type\": 21, \"narrative\": \"FCDO Incoming Funds Apr-Jun 2025 (ACF)\", \"narrative.lang\": \"en\"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2025-04-01\"}",
     "{\"ref\": \"FCDO Incoming Funds Apr-Jun 2025 (KAALO)\", \"humanitarian\": 1, \"transaction-type\": {\"code\": 1}, \"transaction-date\": {\"iso-date\": \"2025-04-01\"}, \"value\": 234056, \"description\": {\"narrative\": \"FCDO Incoming Funds Apr-Jun 2025 (KAALO)\", \"narrative.lang\": \"en\"}, \"provider-org\": {\"ref\": \"GB-GOV-1\", \"provider-activity-id\": \"GB-GOV-1-300978-405\", \"type\": 10, \"narrative\": \"FCDO Incoming Funds Apr-Jun 2025 (KAALO)\", \"narrative.lang\": \"en\"}, \"receiver-org\": {\"type\": 22, \"narrative\": \"FCDO Incoming Funds Apr-Jun 2025 (KAALO)\", \"narrative.lang\": \"en\"}, \"value.currency\": \"GBP\", \"value.value-date\": \"2025-04-01\"}"
-   ]
+   ],
+   "id": "a3fbc52f-4bf4-4c34-83b9-84fe00b0b42e"
   }
  ]
 }

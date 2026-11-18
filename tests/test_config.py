@@ -1,5 +1,6 @@
 """Tests for app.config.Settings: DCM settings, defaults and validation."""
 
+import logging
 import re
 from pathlib import Path
 
@@ -43,11 +44,21 @@ def test_dcm_defaults_match_spec():
     assert s.solr_url == "https://fcdo.iati.cloud/search/activity/"
     assert s.solr_timeout == 10
     assert s.request_timeout == 30
-    assert s.max_depth == 10
-    assert s.max_nodes == 500
-    assert s.id_batch_size == 100
+    assert s.max_depth == 20
+    assert s.max_nodes == 1000
+    assert s.id_batch_size == 200
     assert s.redis_url == "redis://localhost:6379/0"
     assert s.cache_ttl == 86400
+
+
+@pytest.mark.parametrize("value", ["", None])
+def test_secret_key_is_required(monkeypatch, value):
+    if value is None:
+        monkeypatch.delenv("SECRET_KEY")
+    else:
+        monkeypatch.setenv("SECRET_KEY", value)
+    with pytest.raises(ValidationError):
+        _settings()
 
 
 def test_settings_read_from_environment(monkeypatch):
@@ -72,7 +83,7 @@ def test_settings_read_from_env_file(tmp_path):
 def test_unknown_variable_in_env_file_is_rejected(tmp_path):
     env_file = tmp_path / ".env"
     env_file.write_text("NOT_A_SETTING=1\n")
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="not_a_setting"):
         Settings(_env_file=env_file)
 
 
@@ -116,3 +127,17 @@ def test_env_example_documents_every_setting():
     documented = set(re.findall(r"^#?\s*([A-Z][A-Z0-9_]*)=", _ENV_EXAMPLE.read_text(), flags=re.MULTILINE))
     expected = {name.upper() for name in Settings.model_fields} - {f.upper() for f in _NON_ENV_FIELDS}
     assert expected <= documented, f"missing from .env.example: {sorted(expected - documented)}"
+
+
+def test_max_depth_upper_bound(monkeypatch):
+    monkeypatch.setenv("MAX_DEPTH", "50")
+    assert _settings().max_depth == 50
+    monkeypatch.setenv("MAX_DEPTH", "51")
+    with pytest.raises(ValidationError):
+        _settings()
+
+
+def test_pysolr_errors_are_logged_once_by_the_source_not_by_pysolr():
+    # setup_logging runs when app.config is imported; app.iati_cloud_dcma.source logs each handled Solr failure.
+    assert logging.getLogger("pysolr").getEffectiveLevel() == logging.CRITICAL
+    assert logging.getLogger("app.iati_cloud_dcma.source").getEffectiveLevel() == logging.INFO

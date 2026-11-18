@@ -20,3 +20,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 # Expose port (default 5000, override with PORT env var)
 EXPOSE 5000
+
+# The worker timeout must exceed REQUEST_TIMEOUT + SOLR_TIMEOUT (30 s + 10 s by default): a Solr query that starts
+# just before the request budget runs out may still take its full timeout. docker-compose.yaml overrides this command.
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 4 --timeout 60 app.main:app"]
